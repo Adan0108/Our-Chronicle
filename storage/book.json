@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "revision": 0,
+  "title": "Our Chronicle",
+  "subtitle": "Little moments. A life well remembered.",
+  "updatedAt": "2026-10-03T08:29:25.505Z",
+  "pages": [
+    {
+      "id": "page-1",
+      "title": "The little things",
+      "paper": "cream",
+      "elements": [
+        {
+          "id": "t1",
+          "x": 38,
+          "y": 38,
+          "width": 364,
+          "height": 28,
+          "rotation": 0,
+          "type": "text",
+          "text": "CHAPTER ONE · EVERYDAY MAGIC",
+          "style": "label"
+        },
+        {
+          "id": "t2",
+          "x": 38,
+          "y": 82,
+          "width": 364,
+          "height": 58,
+          "rotation": 0,
+          "type": "text",
+          "text": "The little things",
+          "style": "heading"
+        },
+        {
+          "id": "t3",
+          "x": 38,
+          "y": 151,
+          "width": 364,
+          "height": 88,
+          "rotation": 0,
+          "type": "text",
+          "text": "Some days don’t need a grand adventure. Just a slow morning, a good cup of coffee, and you.",
+          "style": "body"
+        },
+        {
+          "id": "i1",
+          "x": 60,
+          "y": 255,
+          "width": 310,
+          "height": 245,
+          "rotation": -3,
+          "type": "image",
+          "filename": "sample-coffee.jpg",
+          "caption": "our usual corner, our usual order",
+          "frame": "polaroid"
+        },
+        {
+          "id": "t4",
+          "x": 48,
+          "y": 520,
+          "width": 344,
+          "height": 36,
+          "rotation": 0,
+          "type": "text",
+          "text": "Here’s to taking the scenic route.",
+          "style": "handwritten"
+        }
+      ]
+    },
+    {
+      "id": "page-2",
+      "title": "A Sunday kind of love",
+      "paper": "lined",
+      "elements": [
+        {
+          "id": "i2",
+          "x": 50,
+          "y": 50,
+          "width": 330,
+          "height": 260,
+          "rotation": 3,
+          "type": "image",
+          "filename": "sample-cafe.jpg",
+          "caption": "a table for two • sunday morning",
+          "frame": "polaroid"
+        },
+        {
+          "id": "t5",
+          "x": 40,
+          "y": 346,
+          "width": 360,
+          "height": 55,
+          "rotation": 0,
+          "type": "text",
+          "text": "A Sunday kind of love",
+          "style": "heading"
+        },
+        {
+          "id": "t6",
+          "x": 40,
+          "y": 405,
+          "width": 360,
+          "height": 150,
+          "rotation": 0,
+          "type": "text",
+          "text": "Rain on the windows. A conversation about everything and nothing. A second cup, then a third.\n\nI hope we always make time for this.",
+          "style": "body"
+        }
+      ]
+    },
+    {
+      "id": "page-3",
+      "title": "Somewhere by the sea",
+      "paper": "sage",
+      "elements": [
+        {
+          "id": "t7",
+          "x": 38,
+          "y": 38,
+          "width": 364,
+          "height": 28,
+          "rotation": 0,
+          "type": "text",
+          "text": "CHAPTER TWO · OUT OF OFFICE",
+          "style": "label"
+        },
+        {
+          "id": "t8",
+          "x": 38,
+          "y": 88,
+          "width": 364,
+          "height": 62,
+          "rotation": 0,
+          "type": "text",
+          "text": "Somewhere by the sea",
+          "style": "heading"
+        },
+        {
+          "id": "i3",
+          "x": 47,
+          "y": 178,
+          "width": 345,
+          "height": 265,
+          "rotation": -2,
+          "type": "image",
+          "filename": "sample-coast.jpg",
+          "caption": "salt in the air, sand in our shoes",
+          "frame": "polaroid"
+        },
+        {
+          "id": "t9",
+          "x": 47,
+          "y": 478,
+          "width": 345,
+          "height": 65,
+          "rotation": 0,
+          "type": "text",
+          "text": "No itinerary. No hurry.\nJust the sound of the waves.",
+          "style": "handwritten"
+        }
+      ]
+    },
+    {
+      "id": "page-4",
+      "title": "Things to remember",
+      "paper": "cream",
+      "elements": [
+        {
+          "id": "t10",
+          "x": 42,
+          "y": 48,
+          "width": 355,
+          "height": 30,
+          "rotation": 0,
+          "type": "text",
+          "text": "A NOTE TO OUR FUTURE SELVES",
+          "style": "label"
+        },
+        {
+          "id": "t11",
+          "x": 42,
+          "y": 106,
+          "width": 355,
+          "height": 66,
+          "rotation": 0,
+          "type": "text",
+          "text": "Things to remember",
+          "style": "heading"
+        },
+        {
+          "id": "t12",
+          "x": 42,
+          "y": 203,
+          "width": 355,
+          "height": 265,
+          "rotation": 0,
+          "type": "text",
+          "text": "The best stories are the ones we make together.\n\nSay yes to the impromptu road trip. Take the blurry photograph. Keep the ticket stub. Write down the funny thing before you forget it.\n\nThere is so much beauty in an ordinary day.",
+          "style": "body"
+        },
+        {
+          "id": "t13",
+          "x": 42,
+          "y": 489,
+          "width": 355,
+          "height": 55,
+          "rotation": 0,
+          "type": "text",
+          "text": "More memories to come…",
+          "style": "handwritten"
+        }
+      ]
+    }
+  ]
+}
