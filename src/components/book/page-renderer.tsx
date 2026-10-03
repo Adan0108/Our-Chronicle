@@ -130,6 +130,117 @@ function ElementContent({ element }: { element: BookElement }) {
   );
 }
 
+type ElementLayerProps = Pick<
+  Props,
+  "editing" | "selectedId" | "onSelect" | "onChange"
+> & {
+  elements: BookElement[];
+};
+
+// Keep elements as direct children of their canvas: react-rnd's parent bounds
+// and the native page-flip event surface stay the same for pages and covers.
+export function ElementLayer({
+  elements,
+  editing = false,
+  selectedId,
+  onSelect,
+  onChange,
+}: ElementLayerProps) {
+  return (
+    <>
+      {elements.map((element, index) =>
+        editing ? (
+          <Rnd
+            key={element.id}
+            size={{ width: element.width, height: element.height }}
+            position={{ x: element.x, y: element.y }}
+            bounds="parent"
+            minWidth={40}
+            minHeight={30}
+            enableResizing={selectedId === element.id && !element.locked}
+            disableDragging={selectedId !== element.id || element.locked}
+            style={{ zIndex: index + 1 }}
+            data-element-id={element.id}
+            data-testid={`element-${element.id}`}
+            data-locked={Boolean(element.locked)}
+            className={`scrap-element editable-element ${selectedId === element.id ? "selected-element" : ""} ${element.locked ? "locked-element" : ""}`}
+            onClick={(event: MouseEvent<HTMLDivElement>) => {
+              event.stopPropagation();
+              onSelect?.(element.id);
+            }}
+            onDragStop={(_event, data) => {
+              if (element.locked) return;
+              onChange?.(element.id, {
+                x: Math.max(0, Math.min(PAGE_WIDTH - element.width, data.x)),
+                y: Math.max(0, Math.min(PAGE_HEIGHT - element.height, data.y)),
+              });
+            }}
+            onResizeStop={(_event, _direction, node, _delta, position) => {
+              if (element.locked) return;
+              onChange?.(element.id, {
+                x: Math.max(0, position.x),
+                y: Math.max(0, position.y),
+                width: Math.min(
+                  PAGE_WIDTH - Math.max(0, position.x),
+                  node.offsetWidth,
+                ),
+                height: Math.min(
+                  PAGE_HEIGHT - Math.max(0, position.y),
+                  node.offsetHeight,
+                ),
+              });
+            }}
+          >
+            <div
+              className="element-hit-area"
+              role="button"
+              tabIndex={0}
+              aria-label={
+                element.type === "text"
+                  ? `Edit text: ${element.text.slice(0, 45)}`
+                  : `Select image: ${element.caption || "photograph"}`
+              }
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect?.(element.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect?.(element.id);
+                }
+              }}
+            >
+              <ElementContent element={element} />
+            </div>
+            {element.locked && selectedId === element.id && (
+              <span className="element-lock-mark" aria-hidden="true">
+                <LockKeyhole size={10} />
+              </span>
+            )}
+          </Rnd>
+        ) : (
+          <div
+            key={element.id}
+            className="scrap-element"
+            data-element-id={element.id}
+            data-testid={`element-${element.id}`}
+            style={{
+              left: element.x,
+              top: element.y,
+              width: element.width,
+              height: element.height,
+              zIndex: index + 1,
+            }}
+          >
+            <ElementContent element={element} />
+          </div>
+        ),
+      )}
+    </>
+  );
+}
+
 export const PageRenderer = forwardRef<HTMLDivElement, Props>(
   function PageRenderer(
     { page, number, editing = false, selectedId, active, onSelect, onChange },
@@ -157,98 +268,13 @@ export const PageRenderer = forwardRef<HTMLDivElement, Props>(
         }}
       >
         <div className="page-grain" aria-hidden="true" />
-        {page.elements.map((element, index) =>
-          editing ? (
-            <Rnd
-              key={element.id}
-              size={{ width: element.width, height: element.height }}
-              position={{ x: element.x, y: element.y }}
-              bounds="parent"
-              minWidth={40}
-              minHeight={30}
-              enableResizing={selectedId === element.id && !element.locked}
-              disableDragging={selectedId !== element.id || element.locked}
-              style={{ zIndex: index + 1 }}
-              data-element-id={element.id}
-              data-testid={`element-${element.id}`}
-              data-locked={Boolean(element.locked)}
-              className={`scrap-element editable-element ${selectedId === element.id ? "selected-element" : ""} ${element.locked ? "locked-element" : ""}`}
-              onClick={(event: MouseEvent<HTMLDivElement>) => {
-                event.stopPropagation();
-                onSelect?.(element.id);
-              }}
-              onDragStop={(_event, data) => {
-                if (element.locked) return;
-                onChange?.(element.id, {
-                  x: Math.max(0, Math.min(PAGE_WIDTH - element.width, data.x)),
-                  y: Math.max(
-                    0,
-                    Math.min(PAGE_HEIGHT - element.height, data.y),
-                  ),
-                });
-              }}
-              onResizeStop={(_event, _direction, node, _delta, position) => {
-                if (element.locked) return;
-                onChange?.(element.id, {
-                  x: Math.max(0, position.x),
-                  y: Math.max(0, position.y),
-                  width: Math.min(
-                    PAGE_WIDTH - Math.max(0, position.x),
-                    node.offsetWidth,
-                  ),
-                  height: Math.min(
-                    PAGE_HEIGHT - Math.max(0, position.y),
-                    node.offsetHeight,
-                  ),
-                });
-              }}
-            >
-              <div
-                className="element-hit-area"
-                role="button"
-                tabIndex={0}
-                aria-label={
-                  element.type === "text"
-                    ? `Edit text: ${element.text.slice(0, 45)}`
-                    : `Select image: ${element.caption || "photograph"}`
-                }
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelect?.(element.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onSelect?.(element.id);
-                  }
-                }}
-              >
-                <ElementContent element={element} />
-              </div>
-              {element.locked && selectedId === element.id && (
-                <span className="element-lock-mark" aria-hidden="true">
-                  <LockKeyhole size={10} />
-                </span>
-              )}
-            </Rnd>
-          ) : (
-            <div
-              key={element.id}
-              className="scrap-element"
-              data-element-id={element.id}
-              data-testid={`element-${element.id}`}
-              style={{
-                left: element.x,
-                top: element.y,
-                width: element.width,
-                height: element.height,
-                zIndex: index + 1,
-              }}
-            >
-              <ElementContent element={element} />
-            </div>
-          ),
-        )}
+        <ElementLayer
+          elements={page.elements}
+          editing={editing}
+          selectedId={selectedId}
+          onSelect={onSelect}
+          onChange={onChange}
+        />
         <span className="page-number">{String(number).padStart(2, "0")}</span>
       </div>
     );

@@ -651,7 +651,7 @@ test("malformed, invalid, unsupported, and incomplete archives leave all local d
   const future = new Map(valid);
   future.set(
     "manifest.json",
-    Buffer.from(JSON.stringify({ ...manifest, formatVersion: 2 })),
+    Buffer.from(JSON.stringify({ ...manifest, formatVersion: 3 })),
   );
   const wrongFormat = new Map(valid);
   wrongFormat.set(

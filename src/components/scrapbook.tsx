@@ -22,6 +22,7 @@ import { useBook } from "@/hooks/use-book";
 import {
   type Book,
   type BookElement,
+  type BookCover,
   type BookPage,
   type PageTemplate,
 } from "@/types/book";
@@ -30,6 +31,8 @@ import {
   duplicateBookPage,
   duplicateElement,
 } from "@/lib/editor";
+import { COVER_STYLES, resolveCover } from "@/lib/cover";
+import { EditableCover } from "./book/cover";
 import { Reader, type ReaderHandle } from "./book/reader";
 import { PageRenderer, ImageRevisionContext } from "./book/page-renderer";
 import { Inspector } from "./editor/inspector";
@@ -57,6 +60,9 @@ export function Scrapbook({
   } = useBook(initialBook);
   const [opened, setOpened] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<"pages" | "cover">(
+    "pages",
+  );
   const [spread, setSpread] = useState(0);
   const [activePageId, setActivePageId] = useState(book.pages[0].id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -119,7 +125,17 @@ export function Scrapbook({
   }, [opened, editing, needsPan]);
   const activePage =
     book.pages.find((page) => page.id === activePageId) || book.pages[0];
-  const selectedElement = activePage.elements.find(
+  const coverEditing = editing && editingTarget === "cover";
+  const cover = resolveCover(book);
+  const editorPage: BookPage = coverEditing
+    ? {
+        id: "front-cover",
+        title: "Front cover",
+        paper: "cream",
+        elements: cover.elements,
+      }
+    : activePage;
+  const selectedElement = editorPage.elements.find(
     (element) => element.id === selectedId,
   );
   const spreadStart = Math.min(
@@ -131,6 +147,19 @@ export function Scrapbook({
       if (busy || transferBusy) return;
       const restored = direction === "undo" ? undo() : redo();
       if (!restored) return;
+      if (coverEditing) {
+        const elements = resolveCover(restored).elements;
+        const added = elements.find(
+          (element) =>
+            !cover.elements.some((current) => current.id === element.id),
+        );
+        setSelectedId(
+          elements.some((element) => element.id === selectedId)
+            ? selectedId
+            : (added?.id ?? null),
+        );
+        return;
+      }
       const restoredPage = restored.pages.find(
         (page) => !book.pages.some((current) => current.id === page.id),
       );
@@ -162,7 +191,17 @@ export function Scrapbook({
             : null,
       );
     },
-    [activePageId, book.pages, busy, transferBusy, redo, selectedId, undo],
+    [
+      activePageId,
+      book.pages,
+      busy,
+      transferBusy,
+      coverEditing,
+      cover.elements,
+      redo,
+      selectedId,
+      undo,
+    ],
   );
   useEffect(() => {
     if (!editing) return;
@@ -186,7 +225,9 @@ export function Scrapbook({
   }, [applyHistory, editing]);
 
   function selectPage(index: number) {
+    if (busy || transferBusy) return;
     setContentsOpen(false);
+    setEditingTarget("pages");
     setOpened(true);
     setActivePageId(book.pages[index].id);
     setSelectedId(null);
@@ -210,27 +251,50 @@ export function Scrapbook({
         : undefined,
     );
   }
+  function changeCover(changes: Partial<BookCover>) {
+    update(
+      (previous) => ({
+        ...previous,
+        cover: { ...resolveCover(previous), ...changes },
+      }),
+      Object.keys(changes).length === 1 && "backgroundColor" in changes
+        ? "cover:backgroundColor"
+        : undefined,
+    );
+  }
+  function changeElements(elements: BookElement[]) {
+    if (coverEditing) changeCover({ elements });
+    else changePage(activePage.id, { elements });
+  }
   function changeElement(
     pageId: string,
     id: string,
     changes: Partial<BookElement>,
   ) {
+    const transformElements = (elements: BookElement[]) =>
+      elements.map((element) =>
+        element.id === id
+          ? ({ ...element, ...changes } as BookElement)
+          : element,
+      );
     update(
-      (previous) => ({
-        ...previous,
-        pages: previous.pages.map((page) =>
-          page.id === pageId
-            ? {
-                ...page,
-                elements: page.elements.map((element) =>
-                  element.id === id
-                    ? ({ ...element, ...changes } as BookElement)
-                    : element,
-                ),
-              }
-            : page,
-        ),
-      }),
+      (previous) =>
+        coverEditing
+          ? {
+              ...previous,
+              cover: {
+                ...resolveCover(previous),
+                elements: transformElements(resolveCover(previous).elements),
+              },
+            }
+          : {
+              ...previous,
+              pages: previous.pages.map((page) =>
+                page.id === pageId
+                  ? { ...page, elements: transformElements(page.elements) }
+                  : page,
+              ),
+            },
       Object.keys(changes).length === 1 &&
         ["text", "caption", "fontSize", "rotation", "color"].includes(
           Object.keys(changes)[0],
@@ -240,6 +304,7 @@ export function Scrapbook({
     );
   }
   function addText() {
+    if (editorPage.elements.length >= 60) return;
     const element: BookElement = {
       id: crypto.randomUUID(),
       type: "text",
@@ -250,8 +315,9 @@ export function Scrapbook({
       height: 110,
       rotation: 0,
       style: "body",
+      ...(coverEditing ? { color: COVER_STYLES[cover.style].textColor } : {}),
     };
-    changePage(activePage.id, { elements: [...activePage.elements, element] });
+    changeElements([...editorPage.elements, element]);
     setSelectedId(element.id);
   }
   async function upload(file: File, replace = false) {
@@ -297,14 +363,27 @@ export function Scrapbook({
           rotation: -2,
           frame: "polaroid",
         };
-        update((previous) => ({
-          ...previous,
-          pages: previous.pages.map((page) =>
-            page.id === activePage.id
-              ? { ...page, elements: [...page.elements, element] }
-              : page,
-          ),
-        }));
+        // Keep edits made while the upload was in flight, on its original target.
+        update((previous) => {
+          if (coverEditing) {
+            const previousCover = resolveCover(previous);
+            return {
+              ...previous,
+              cover: {
+                ...previousCover,
+                elements: [...previousCover.elements, element],
+              },
+            };
+          }
+          return {
+            ...previous,
+            pages: previous.pages.map((page) =>
+              page.id === activePage.id
+                ? { ...page, elements: [...page.elements, element] }
+                : page,
+            ),
+          };
+        });
         setSelectedId(element.id);
       }
       await save();
@@ -325,21 +404,21 @@ export function Scrapbook({
     setSpread(Math.floor(book.pages.length / 2) * 2);
   }
   function copyElement() {
-    if (!selectedElement || activePage.elements.length >= 60) return;
+    if (!selectedElement || editorPage.elements.length >= 60) return;
     const copy = duplicateElement(selectedElement);
-    changePage(activePage.id, { elements: [...activePage.elements, copy] });
+    changeElements([...editorPage.elements, copy]);
     setSelectedId(copy.id);
   }
   function layerElement(direction: "forward" | "backward") {
     if (!selectedElement) return;
-    const index = activePage.elements.findIndex(
+    const index = editorPage.elements.findIndex(
       (element) => element.id === selectedId,
     );
     const next = index + (direction === "forward" ? 1 : -1);
-    if (next < 0 || next >= activePage.elements.length) return;
-    const elements = [...activePage.elements];
+    if (next < 0 || next >= editorPage.elements.length) return;
+    const elements = [...editorPage.elements];
     [elements[index], elements[next]] = [elements[next], elements[index]];
-    changePage(activePage.id, { elements });
+    changeElements(elements);
   }
   function copyPage() {
     if (book.pages.length >= 100) return;
@@ -395,11 +474,25 @@ export function Scrapbook({
   }
   function toggleEdit() {
     setContentsOpen(false);
-    setOpened(true);
+    if (!editing) setEditingTarget(opened ? "pages" : "cover");
     setEditing(!editing);
     setSelectedId(null);
     setActivePageId(book.pages[spreadStart].id);
     if (editing) void save();
+  }
+  function editCover() {
+    if (busy || transferBusy) return;
+    setContentsOpen(false);
+    setSelectedId(null);
+    setOpened(false);
+    setEditingTarget("cover");
+    setEditing(true);
+  }
+  function editPages() {
+    if (busy || transferBusy) return;
+    setSelectedId(null);
+    setOpened(true);
+    setEditingTarget("pages");
   }
   function returnToBeginning() {
     setContentsOpen(false);
@@ -407,7 +500,7 @@ export function Scrapbook({
     if (editing) {
       void save();
       setEditing(false);
-      setOpened(true);
+      setOpened(!coverEditing);
       setSpread(0);
     } else if (opened && spreadStart > 0) reader.current?.navigate(0);
     else reader.current?.close();
@@ -509,7 +602,11 @@ export function Scrapbook({
               onClick={toggleEdit}
             >
               {editing ? <Check size={15} /> : <Pencil size={15} />}
-              {editing ? "Done editing" : "Edit scrapbook"}
+              {coverEditing
+                ? "Preview cover"
+                : editing
+                  ? "Done editing"
+                  : "Edit scrapbook"}
             </button>
           </div>
         </header>
@@ -527,7 +624,8 @@ export function Scrapbook({
             </div>
             <button
               className={`cover-nav ${!opened ? "nav-active" : ""}`}
-              onClick={returnToBeginning}
+              onClick={editing ? editCover : returnToBeginning}
+              aria-label={editing ? "Customize front cover" : undefined}
             >
               <span className="mini-cover">
                 <Leaf size={16} />
@@ -583,7 +681,7 @@ export function Scrapbook({
             </nav>
           </aside>
           <main className="main-workspace">
-            {!opened && (
+            {!opened && !coverEditing && (
               <div className="workspace-heading">
                 <div>
                   <div className="eyebrow">
@@ -614,7 +712,7 @@ export function Scrapbook({
               </div>
             )}
             <div
-              className={`book-stage ${opened ? "stage-open" : "stage-cover"}`}
+              className={`book-stage ${coverEditing ? "stage-cover-edit" : opened ? "stage-open" : "stage-cover"}`}
             >
               <div
                 className="spread-scroll"
@@ -624,7 +722,16 @@ export function Scrapbook({
                 aria-label="Book spread"
               >
                 <div className="book-spread">
-                  {editing ? (
+                  {coverEditing ? (
+                    <EditableCover
+                      book={book}
+                      selectedId={selectedId}
+                      onSelect={setSelectedId}
+                      onChange={(id, changes) =>
+                        changeElement(editorPage.id, id, changes)
+                      }
+                    />
+                  ) : editing ? (
                     <div className="editing-spread">
                       {book.pages
                         .slice(spreadStart, spreadStart + 2)
@@ -706,7 +813,11 @@ export function Scrapbook({
                 </div>
               )}
               <div className="book-controls">
-                {opened ? (
+                {coverEditing ? (
+                  <span className="cover-edit-label">
+                    Make the cover your own
+                  </span>
+                ) : opened ? (
                   <>
                     <button
                       className="round-button"
@@ -759,7 +870,7 @@ export function Scrapbook({
                   </button>
                 )}
               </div>
-              {opened && editing && (
+              {editing && (
                 <button
                   className="editor-jump-link"
                   onClick={() =>
@@ -773,7 +884,11 @@ export function Scrapbook({
                   }
                 >
                   <Pencil size={13} />
-                  {selectedElement ? "Edit selected item" : "Go to page tools"}
+                  {selectedElement
+                    ? "Edit selected item"
+                    : coverEditing
+                      ? "Go to cover tools"
+                      : "Go to page tools"}
                 </button>
               )}
               <p className="interaction-hint">
@@ -781,6 +896,11 @@ export function Scrapbook({
                   <>
                     <LoaderCircle size={13} className="spinning" />
                     Adding your photograph…
+                  </>
+                ) : coverEditing ? (
+                  <>
+                    <Sparkles size={13} /> Arrange your cover, then choose
+                    Preview cover to read
                   </>
                 ) : opened ? (
                   editing ? (
@@ -809,8 +929,13 @@ export function Scrapbook({
           </main>
           {editing && (
             <Inspector
+              key={coverEditing ? "cover-inspector" : "page-inspector"}
               book={book}
-              page={activePage}
+              page={editorPage}
+              cover={coverEditing ? cover : undefined}
+              onCoverChange={changeCover}
+              onEditCover={editCover}
+              onEditPages={editPages}
               element={selectedElement}
               busy={busy}
               onReturnToBook={() =>
@@ -837,11 +962,11 @@ export function Scrapbook({
               onMovePage={movePage}
               onUpload={upload}
               onDeleteElement={() => {
-                changePage(activePage.id, {
-                  elements: activePage.elements.filter(
+                changeElements(
+                  editorPage.elements.filter(
                     (element) => element.id !== selectedId,
                   ),
-                });
+                );
                 setSelectedId(null);
               }}
               onAddPage={addPage}

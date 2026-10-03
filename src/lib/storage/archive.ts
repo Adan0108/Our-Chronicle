@@ -6,6 +6,7 @@ import * as yauzl from "yauzl";
 import { ZipFile } from "yazl";
 import { z } from "zod";
 import { bookSchema, imageNameSchema, type Book } from "@/types/book";
+import { bookElements } from "@/lib/cover";
 import { StorageError } from "./errors";
 
 // v1 ships ESM declarations with a CommonJS export assignment; load its CJS API.
@@ -20,20 +21,18 @@ export const CONTENT_MAX_BYTES = 500 * 1024 * 1024;
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const BOOK_MAX_BYTES = 1024 * 1024;
 const MANIFEST_MAX_BYTES = 16 * 1024;
-const ENTRY_LIMIT = 6003;
+const ENTRY_LIMIT = 6063;
 const PIXEL_LIMIT = 24_000_000;
 const manifestSchema = z.object({
   format: z.literal("our-chronicle"),
-  formatVersion: z.literal(1),
+  formatVersion: z.union([z.literal(1), z.literal(2)]),
   exportedAt: z.iso.datetime(),
 });
 
 export function referencedImages(book: Book): Set<string> {
   return new Set(
-    book.pages.flatMap((page) =>
-      page.elements.flatMap((element) =>
-        element.type === "image" && element.filename ? [element.filename] : [],
-      ),
+    bookElements(book).flatMap((element) =>
+      element.type === "image" && element.filename ? [element.filename] : [],
     ),
   );
 }
@@ -63,15 +62,18 @@ function validateManifest(bytes: Buffer) {
     "format" in value &&
     value.format === "our-chronicle" &&
     "formatVersion" in value &&
-    value.formatVersion !== 1
+    value.formatVersion !== 1 &&
+    value.formatVersion !== 2
   )
     throw new StorageError(
-      "This archive format version is not supported. Choose a version 1 Our Chronicle export.",
+      "This archive format version is not supported. Choose a version 1 or 2 Our Chronicle export.",
     );
-  if (!manifestSchema.safeParse(value).success)
+  const manifest = manifestSchema.safeParse(value);
+  if (!manifest.success)
     throw new StorageError(
       "Choose an Our Chronicle export with a valid manifest.json.",
     );
+  return manifest.data;
 }
 
 function isAnimatedPng(bytes: Buffer): boolean {
@@ -153,7 +155,7 @@ export async function encodeArchive(
     JSON.stringify(
       {
         format: "our-chronicle",
-        formatVersion: 1,
+        formatVersion: book.cover ? 2 : 1,
         exportedAt: new Date().toISOString(),
       },
       null,
@@ -340,8 +342,12 @@ export async function decodeArchive(
           throw new StorageError(
             "The archive must contain book.json and manifest.json.",
           );
-        validateManifest(manifestBytes);
+        const manifest = validateManifest(manifestBytes);
         const book = parseBook(parseJson(bookBytes, "book.json"));
+        if (book.cover && manifest.formatVersion !== 2)
+          throw new StorageError(
+            "Customized covers require a version 2 Our Chronicle archive.",
+          );
         const references = referencedImages(book);
         const images = new Map<string, Buffer>();
         for (const [filename, data] of entries) {

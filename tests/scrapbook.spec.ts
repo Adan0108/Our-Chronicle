@@ -15,6 +15,9 @@ async function open(page: Page) {
   await page
     .getByRole("button", { name: "Open scrapbook", exact: true })
     .click();
+  await firstSpread(page);
+}
+async function firstSpread(page: Page) {
   await expect(page.getByTestId("page-indicator")).toContainText("1 – 2");
   // Native opening finishes before the surrounding spread finishes recentering.
   await expect(page.locator(".book-spread")).toHaveCSS("transform", "none");
@@ -72,6 +75,7 @@ test("opens the cover, turns pages with buttons, click, and mouse drag", async (
   await page
     .getByRole("button", { name: "Open scrapbook", exact: true })
     .click();
+  await firstSpread(page);
   await expect(page.getByTestId("page-1")).toBeVisible();
   await expect(page.getByTestId("page-2")).toBeVisible();
   await expect(page.getByTestId("page-1").getByRole("img")).toHaveJSProperty(
@@ -246,6 +250,7 @@ test("saved edits survive closing, keyboard reopening, and refresh", async ({
   await page
     .getByRole("button", { name: "Open scrapbook", exact: true })
     .press("Space");
+  await firstSpread(page);
   await expect(page.getByTestId("page-1")).toContainText(text);
   await page
     .getByRole("button", { name: "Edit scrapbook", exact: true })
@@ -281,6 +286,7 @@ test("edits text, persists after refresh, adds and deletes text", async ({
   await page
     .getByRole("button", { name: "Open scrapbook", exact: true })
     .click();
+  await firstSpread(page);
   await expect(page.getByTestId("page-1")).toContainText(
     "Our favorite slow mornings",
   );
@@ -448,6 +454,7 @@ test("uploads, drags, resizes, replaces, refreshes, and deletes an image", async
   await page
     .getByRole("button", { name: "Open scrapbook", exact: true })
     .click();
+  await firstSpread(page);
   await expect(
     page
       .getByTestId("page-1")
@@ -482,6 +489,7 @@ test("uploads, drags, resizes, replaces, refreshes, and deletes an image", async
   await page
     .getByRole("button", { name: "Open scrapbook", exact: true })
     .click();
+  await firstSpread(page);
   await expect(
     page
       .getByTestId("page-1")
@@ -678,6 +686,7 @@ test("mobile can view both pages, edit the right page, and verify its save", asy
   await page
     .getByRole("button", { name: "Open scrapbook", exact: true })
     .click();
+  await firstSpread(page);
   await page
     .getByRole("button", { name: "Show right page", exact: true })
     .click();
@@ -740,6 +749,7 @@ for (const viewport of [
     await page
       .getByRole("button", { name: "Open scrapbook", exact: true })
       .click();
+    await firstSpread(page);
     await expect(
       page.getByRole("complementary", { name: "Scrapbook editor" }),
     ).toHaveCount(0);

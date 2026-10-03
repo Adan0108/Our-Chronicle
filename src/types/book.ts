@@ -103,6 +103,11 @@ export const pageSchema = z.object({
   paper: z.enum(["cream", "lined", "sage"]),
   elements: z.array(elementSchema).max(60),
 });
+export const coverSchema = z.object({
+  style: z.enum(["leather", "linen", "sage", "rose", "ivory"]),
+  backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  elements: z.array(elementSchema).max(60),
+});
 export const bookSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -110,17 +115,22 @@ export const bookSchema = z
     title: z.string().min(1).max(100),
     subtitle: z.string().max(200),
     updatedAt: z.iso.datetime(),
+    cover: coverSchema.optional(),
     pages: z.array(pageSchema).min(2).max(100),
   })
   .superRefine((book, ctx) => {
     const ids = new Set<string>();
-    for (const page of book.pages) {
-      for (const value of [page, ...page.elements]) {
+    const surfaces = [...(book.cover ? [book.cover] : []), ...book.pages];
+    for (const surface of surfaces) {
+      for (const value of [
+        ...("id" in surface ? [surface] : []),
+        ...surface.elements,
+      ]) {
         if (ids.has(value.id))
           ctx.addIssue({ code: "custom", message: "IDs must be unique" });
         ids.add(value.id);
       }
-      for (const el of page.elements) {
+      for (const el of surface.elements) {
         if (
           el.x + el.width > PAGE_WIDTH + 1 ||
           el.y + el.height > PAGE_HEIGHT + 1
@@ -134,6 +144,8 @@ export const bookSchema = z
   });
 export type Book = z.infer<typeof bookSchema>;
 export type BookPage = z.infer<typeof pageSchema>;
+export type BookCover = z.infer<typeof coverSchema>;
+export type CoverStyle = BookCover["style"];
 export type BookElement = z.infer<typeof elementSchema>;
 export type ImageElement = Extract<BookElement, { type: "image" }>;
 export type TextElement = Extract<BookElement, { type: "text" }>;

@@ -15,7 +15,13 @@ import { constants } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
-import { bookSchema, imageNameSchema, type Book } from "@/types/book";
+import {
+  bookSchema,
+  imageNameSchema,
+  type Book,
+  type BookElement,
+} from "@/types/book";
+import { bookElements } from "@/lib/cover";
 import { createSampleBook, sampleArtwork } from "./sample";
 import type { BookReplacement, BookStorage } from "./index";
 import { StorageError } from "./errors";
@@ -182,17 +188,25 @@ export class LocalBookStorage implements BookStorage {
         `${randomUUID()}${path.extname(filename)}`,
       ]),
     );
+    const remapElement = (element: BookElement): BookElement =>
+      element.type === "image" && element.filename
+        ? { ...element, filename: names.get(element.filename) }
+        : element;
     const saved = bookSchema.parse({
       ...incoming,
       revision: previous.revision + 1,
       updatedAt: new Date().toISOString(),
+      ...(incoming.cover
+        ? {
+            cover: {
+              ...incoming.cover,
+              elements: incoming.cover.elements.map(remapElement),
+            },
+          }
+        : {}),
       pages: incoming.pages.map((page) => ({
         ...page,
-        elements: page.elements.map((element) =>
-          element.type === "image" && element.filename
-            ? { ...element, filename: names.get(element.filename) }
-            : element,
-        ),
+        elements: page.elements.map(remapElement),
       })),
     });
     // If backup creation fails, no current book/image content has been touched.
@@ -351,31 +365,19 @@ export class LocalBookStorage implements BookStorage {
           "This book changed in another tab. Reload to get the latest version.",
           409,
         );
-      for (const page of book.pages)
-        for (const el of page.elements) {
-          if (el.type === "image" && el.filename)
-            await this.ensureImage(el.filename);
-        }
+      for (const el of bookElements(book))
+        if (el.type === "image" && el.filename)
+          await this.ensureImage(el.filename);
       const saved = {
         ...book,
         revision: previous.revision + 1,
         updatedAt: new Date().toISOString(),
       };
       await this.atomicWrite(saved);
-      const kept = new Set(
-        saved.pages.flatMap((p) =>
-          p.elements.flatMap((el) =>
-            el.type === "image" && el.filename ? [el.filename] : [],
-          ),
-        ),
-      );
+      const kept = referencedImages(saved);
       const removed = new Set(
-        previous.pages.flatMap((p) =>
-          p.elements.flatMap((el) =>
-            el.type === "image" && el.filename && !kept.has(el.filename)
-              ? [el.filename]
-              : [],
-          ),
+        [...referencedImages(previous)].filter(
+          (filename) => !kept.has(filename),
         ),
       );
       // Commit first; archive/cleanup failures cannot invalidate a successful save.
@@ -436,10 +438,8 @@ export class LocalBookStorage implements BookStorage {
     return this.locked(async () => {
       const book = await this.readOrCreate();
       if (
-        book.pages.some((p) =>
-          p.elements.some(
-            (el) => el.type === "image" && el.filename === filename,
-          ),
+        bookElements(book).some(
+          (el) => el.type === "image" && el.filename === filename,
         )
       )
         throw new StorageError(

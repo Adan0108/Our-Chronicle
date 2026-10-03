@@ -1,9 +1,83 @@
 {
   "schemaVersion": 1,
-  "revision": 148,
+  "revision": 190,
   "title": "Our Chronicle",
   "subtitle": "Little moments. A life well remembered.",
-  "updatedAt": "2026-10-03T13:38:12.175Z",
+  "updatedAt": "2026-10-03T14:19:57.601Z",
+  "cover": {
+    "style": "rose",
+    "backgroundColor": "#b18b84",
+    "elements": [
+      {
+        "id": "cover-default-topline",
+        "x": 42,
+        "y": 52,
+        "width": 356,
+        "height": 24,
+        "rotation": 0,
+        "type": "text",
+        "text": "A COLLECTION OF OUR DAYS",
+        "style": "label",
+        "fontFamily": "sans",
+        "fontSize": 9,
+        "color": "#fff3e3",
+        "bold": false,
+        "italic": false,
+        "align": "center"
+      },
+      {
+        "id": "cover-default-title",
+        "x": 66,
+        "y": 248,
+        "width": 308,
+        "height": 120,
+        "rotation": 0,
+        "type": "text",
+        "text": "Our Chronicle",
+        "style": "heading",
+        "fontFamily": "serif",
+        "fontSize": 44,
+        "color": "#fff3e3",
+        "bold": false,
+        "italic": false,
+        "align": "center"
+      },
+      {
+        "id": "cover-default-subtitle",
+        "x": 85,
+        "y": 382,
+        "width": 270,
+        "height": 64,
+        "rotation": 0,
+        "type": "text",
+        "text": "Little moments. A life well remembered.",
+        "style": "body",
+        "fontFamily": "serif",
+        "fontSize": 14,
+        "color": "#fff3e3",
+        "bold": false,
+        "italic": true,
+        "align": "center"
+      },
+      {
+        "id": "cover-default-bottom",
+        "x": 42,
+        "y": 514,
+        "width": 356,
+        "height": 24,
+        "rotation": 0,
+        "type": "text",
+        "text": "COLLECT MOMENTS, KEEP THEM CLOSE",
+        "style": "label",
+        "fontFamily": "sans",
+        "fontSize": 8,
+        "color": "#fff3e3",
+        "bold": false,
+        "italic": false,
+        "align": "center"
+      }
+    ]
+  },
   "pages": [
     {
       "id": "page-1",
@@ -51,7 +125,7 @@
           "height": 245,
           "rotation": -3,
           "type": "image",
-          "filename": "1e8c8b08-6ff6-4c26-9631-c2c3cca0a450.jpg",
+          "filename": "39b68dd5-e4e0-48c2-821b-e04058062d88.jpg",
           "caption": "our usual corner, our usual order",
           "frame": "polaroid"
         },
@@ -126,7 +200,7 @@
           "rotation": -2,
           "locked": true,
           "type": "image",
-          "filename": "7e1a8a30-4c0e-47db-94c1-5562d5beb52c.webp",
+          "filename": "0177a408-6c33-40a5-a17f-0d006d2978b9.webp",
           "caption": "A moment worth keeping",
           "frame": "polaroid"
         },
@@ -139,7 +213,7 @@
           "rotation": -31,
           "locked": true,
           "type": "image",
-          "filename": "6a8be26f-959c-4440-a665-108378ddb05a.webp",
+          "filename": "96c6bd59-880a-4254-a68c-495c5082a928.webp",
           "caption": "A moment worth keeping",
           "frame": "polaroid",
           "crop": {
@@ -164,7 +238,7 @@
           "height": 260,
           "rotation": 3,
           "type": "image",
-          "filename": "0115fc6a-857b-4fea-87a9-e60122e08b90.jpg",
+          "filename": "f6693a3d-bf2d-4153-88af-eb3f452992dd.jpg",
           "caption": "a table for two • sunday morning",
           "frame": "polaroid"
         },
@@ -227,7 +301,7 @@
           "height": 265,
           "rotation": -2,
           "type": "image",
-          "filename": "37f70776-abba-4280-8c6f-9055f4fbfdfd.jpg",
+          "filename": "5f55d16c-1cc7-4fc1-bace-2cc714f3108f.jpg",
           "caption": "salt in the air, sand in our shoes",
           "frame": "polaroid"
         },
@@ -286,7 +360,7 @@
           "height": 296,
           "rotation": -16,
           "type": "image",
-          "filename": "a9a7e27b-2b39-4de0-84c1-6f4c1dea6b84.webp",
+          "filename": "5d27d2ef-f1ab-46db-ba1c-047670098f8f.webp",
           "caption": "A moment worth keeping",
           "frame": "polaroid"
         },
@@ -327,17 +401,6 @@
           "style": "heading"
         },
         {
-          "id": "eb962fb0-0f09-494b-be34-1ff70d8b583e",
-          "x": 55,
-          "y": 145,
-          "width": 330,
-          "height": 320,
-          "rotation": -2,
-          "type": "image",
-          "caption": "A photograph worth keeping",
-          "frame": "polaroid"
-        },
-        {
           "id": "585ad889-23c2-46bf-82d3-40b654da0188",
           "x": 50,
           "y": 490,
@@ -347,6 +410,37 @@
           "type": "text",
           "text": "The story behind this photograph…",
           "style": "handwritten"
+        },
+        {
+          "id": "d2a0e052-e711-4cac-a54f-2feb20f2b04c",
+          "x": 160,
+          "y": 165,
+          "width": 280,
+          "height": 309.55555555555554,
+          "rotation": -2,
+          "locked": false,
+          "type": "image",
+          "filename": "dd0cc3a5-850c-4c7d-9b5d-52cea0526e60.webp",
+          "caption": "A moment worth keeping",
+          "frame": "polaroid"
+        },
+        {
+          "id": "fef32222-ffd7-48db-bff9-a3959144efab",
+          "x": 50,
+          "y": 112,
+          "width": 280,
+          "height": 309.55555555555554,
+          "rotation": -2,
+          "type": "image",
+          "filename": "dd0cc3a5-850c-4c7d-9b5d-52cea0526e60.webp",
+          "caption": "A moment worth keeping",
+          "frame": "polaroid",
+          "crop": {
+            "x": 12.171320676150572,
+            "y": 0.805008944543832,
+            "width": 72.23855522889542,
+            "height": 76.92307692307692
+          }
         }
       ]
     }

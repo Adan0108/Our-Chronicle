@@ -21,10 +21,12 @@ import {
 import {
   TEXT_PRESETS,
   type Book,
+  type BookCover,
   type BookPage,
   type BookElement,
   type PageTemplate,
 } from "@/types/book";
+import { COVER_STYLES } from "@/lib/cover";
 import { CropDialog } from "./crop-dialog";
 import { TemplateDialog } from "./template-dialog";
 
@@ -47,6 +49,10 @@ type Props = {
   onDuplicatePage: () => void;
   onMovePage: (direction: -1 | 1) => void;
   onReturnToBook: () => void;
+  cover?: BookCover;
+  onCoverChange?: (changes: Partial<BookCover>) => void;
+  onEditCover?: () => void;
+  onEditPages?: () => void;
 };
 
 function layerLabel(element: BookElement) {
@@ -117,12 +123,15 @@ export function Inspector({
   onDuplicatePage,
   onMovePage,
   onReturnToBook,
+  cover,
+  onCoverChange,
+  onEditCover,
+  onEditPages,
 }: Props) {
   const [cropping, setCropping] = useState(false);
   const [choosingTemplate, setChoosingTemplate] = useState(false);
-  const elementIndex = page.elements.findIndex(
-    (item) => item.id === element?.id,
-  );
+  const elements = cover?.elements ?? page.elements;
+  const elementIndex = elements.findIndex((item) => item.id === element?.id);
   const pageIndex = book.pages.findIndex((item) => item.id === page.id);
   const textDefaults =
     element?.type === "text" ? TEXT_PRESETS[element.style] : null;
@@ -131,29 +140,86 @@ export function Inspector({
     <aside
       id="scrapbook-editor"
       className="inspector"
-      aria-label="Scrapbook editor"
+      aria-label={cover ? "Cover editor" : "Scrapbook editor"}
       aria-busy={busy}
     >
       <div className="inspector-heading">
         <SlidersHorizontal size={15} />
-        <span>Make it yours</span>
+        <span>{cover ? "Your book cover" : "Make it yours"}</span>
         <span className="tiny-pill">EDITING</span>
       </div>
       <button className="return-to-book" onClick={onReturnToBook}>
-        <ArrowUp size={13} /> Back to the page
+        <ArrowUp size={13} /> {cover ? "Back to the cover" : "Back to the page"}
       </button>
+      {(cover ? onEditPages : onEditCover) && (
+        <button
+          className="secondary-button editor-target-button"
+          disabled={busy}
+          onClick={cover ? onEditPages : onEditCover}
+        >
+          <LayoutTemplate size={14} /> {cover ? "Edit pages" : "Edit cover"}
+        </button>
+      )}
+      {cover && onCoverChange && (
+        <section className="inspector-section cover-appearance">
+          <span className="section-label">THE FEEL OF YOUR COVER</span>
+          <label>
+            Cover style
+            <select
+              aria-label="Cover style"
+              value={cover.style}
+              disabled={busy}
+              onChange={(event) => {
+                const style = event.target.value as BookCover["style"];
+                const previous = COVER_STYLES[cover.style];
+                const next = COVER_STYLES[style];
+                onCoverChange({
+                  style,
+                  backgroundColor: next.backgroundColor,
+                  elements: elements.map((item) =>
+                    item.type === "text" &&
+                    item.color?.toLowerCase() ===
+                      previous.textColor.toLowerCase()
+                      ? { ...item, color: next.textColor }
+                      : item,
+                  ),
+                });
+              }}
+            >
+              {Object.entries(COVER_STYLES).map(([value, preset]) => (
+                <option value={value} key={value}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Cover color
+            <input
+              type="color"
+              aria-label="Cover color"
+              value={cover.backgroundColor}
+              disabled={busy}
+              onChange={(event) =>
+                onCoverChange({ backgroundColor: event.target.value })
+              }
+            />
+          </label>
+          <p className="field-hint">
+            Choose a texture, then make the color your own. Preview the cover
+            when you are ready to open your book.
+          </p>
+        </section>
+      )}
       <section className="inspector-section">
         <span className="section-label">ADD A LITTLE SOMETHING</span>
         <div className="tool-grid">
-          <button
-            onClick={onAddText}
-            disabled={busy || page.elements.length >= 60}
-          >
+          <button onClick={onAddText} disabled={busy || elements.length >= 60}>
             <Type size={20} />
             Text
           </button>
           <label
-            className={`upload-tool ${busy || page.elements.length >= 60 ? "disabled" : ""}`}
+            className={`upload-tool ${busy || elements.length >= 60 ? "disabled" : ""}`}
           >
             <ImagePlus size={20} />
             Photo
@@ -161,7 +227,7 @@ export function Inspector({
               type="file"
               accept="image/jpeg,image/png,image/webp"
               aria-label="Upload image"
-              disabled={busy || page.elements.length >= 60}
+              disabled={busy || elements.length >= 60}
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) onUpload(file);
@@ -204,7 +270,17 @@ export function Inspector({
                   value={element.style}
                   onChange={(event) => {
                     const style = event.target.value as typeof element.style;
-                    onElementChange({ style, ...TEXT_PRESETS[style] });
+                    onElementChange({
+                      style,
+                      ...TEXT_PRESETS[style],
+                      ...(cover
+                        ? {
+                            color:
+                              element.color ??
+                              COVER_STYLES[cover.style].textColor,
+                          }
+                        : {}),
+                    });
                   }}
                 >
                   <option value="heading">Journal heading</option>
@@ -385,7 +461,7 @@ export function Inspector({
             <button
               className="secondary-button"
               onClick={onDuplicateElement}
-              disabled={busy || page.elements.length >= 60}
+              disabled={busy || elements.length >= 60}
             >
               <Copy size={14} /> Duplicate{" "}
               {element.type === "image" ? "image" : "text"}
@@ -402,7 +478,7 @@ export function Inspector({
             <button
               className="secondary-button"
               onClick={() => onLayerElement("forward")}
-              disabled={busy || elementIndex >= page.elements.length - 1}
+              disabled={busy || elementIndex >= elements.length - 1}
             >
               <ArrowUp size={14} /> Bring forward
             </button>
@@ -431,17 +507,17 @@ export function Inspector({
       )}
       <details className="inspector-section layers-section" open>
         <summary>
-          <Layers size={14} /> Layers <span>{page.elements.length}</span>
+          <Layers size={14} /> Layers <span>{elements.length}</span>
         </summary>
         <p className="field-hint">
           Frontmost first. Select a layer even when it is covered or locked.
         </p>
         <div className="layer-list">
-          {[...page.elements].reverse().map((item, index) => (
+          {[...elements].reverse().map((item, index) => (
             <button
               key={item.id}
               className={`layer-button ${item.id === element?.id ? "selected" : ""}`}
-              aria-label={`Select layer: ${layerLabel(item)} (layer ${page.elements.length - index})`}
+              aria-label={`Select layer: ${layerLabel(item)} (layer ${elements.length - index})`}
               aria-pressed={item.id === element?.id}
               data-testid={`layer-${item.id}`}
               onClick={() => onSelectElement(item.id)}
@@ -453,122 +529,132 @@ export function Inspector({
               )}
               <span>{layerLabel(item)}</span>
               {item.locked && <Lock size={12} aria-label="Position locked" />}
-              <span className="layer-number">
-                {page.elements.length - index}
-              </span>
+              <span className="layer-number">{elements.length - index}</span>
             </button>
           ))}
-          {!page.elements.length && (
-            <p className="field-hint">This page is a fresh start.</p>
+          {!elements.length && (
+            <p className="field-hint">
+              {cover
+                ? "Your cover is a fresh start."
+                : "This page is a fresh start."}
+            </p>
           )}
         </div>
       </details>
-      <section className="inspector-section">
-        <span className="section-label">THIS PAGE</span>
-        <label>
-          Page name
-          <input
-            aria-label="Page name"
-            maxLength={100}
-            value={page.title}
-            onChange={(event) =>
-              onPageChange({ title: event.target.value || "Untitled page" })
-            }
-          />
-        </label>
-        <label>
-          Paper
-          <select
-            aria-label="Paper"
-            value={page.paper}
-            onChange={(event) =>
-              onPageChange({ paper: event.target.value as "cream" })
-            }
-          >
-            <option value="cream">Warm cream</option>
-            <option value="lined">Notebook lines</option>
-            <option value="sage">Soft sage</option>
-          </select>
-        </label>
-        <div className="page-actions">
-          <button
-            className="secondary-button"
-            onClick={() => onAddPage()}
-            disabled={busy || book.pages.length >= 100}
-          >
-            <Plus size={14} /> Add page
-          </button>
-          <button
-            title="Delete selected page"
-            aria-label="Delete selected page"
-            className="icon-button danger-icon"
-            onClick={onDeletePage}
-            disabled={busy || book.pages.length <= 2}
-          >
-            <Trash2 size={15} />
-          </button>
-        </div>
-        <button
-          className="secondary-button template-picker-button"
-          onClick={() => setChoosingTemplate(true)}
-          disabled={busy || book.pages.length >= 100}
-        >
-          <LayoutTemplate size={14} /> New page from template
-        </button>
-        <div className="element-actions page-extra-actions">
-          <button
-            className="secondary-button"
-            onClick={onDuplicatePage}
-            disabled={busy || book.pages.length >= 100}
-          >
-            <Copy size={14} /> Duplicate page
-          </button>
-          <span className="page-position">
-            Page {pageIndex + 1} of {book.pages.length}
-          </span>
-          <button
-            className="secondary-button"
-            onClick={() => onMovePage(-1)}
-            disabled={busy || pageIndex <= 0}
-          >
-            <ArrowUp size={14} /> Move page earlier
-          </button>
-          <button
-            className="secondary-button"
-            onClick={() => onMovePage(1)}
-            disabled={busy || pageIndex >= book.pages.length - 1}
-          >
-            <ArrowDown size={14} /> Move page later
-          </button>
-        </div>
-        {book.pages.length <= 2 && (
-          <p className="field-hint">Keep at least two pages in your book.</p>
-        )}
-      </section>
-      <details className="inspector-section cover-settings">
-        <summary>Book cover details</summary>
-        <label>
-          Book title
-          <input
-            aria-label="Book title"
-            maxLength={100}
-            value={book.title}
-            onChange={(event) =>
-              onBookChange({ title: event.target.value || "Untitled book" })
-            }
-          />
-        </label>
-        <label>
-          Subtitle
-          <textarea
-            aria-label="Subtitle"
-            rows={2}
-            maxLength={200}
-            value={book.subtitle}
-            onChange={(event) => onBookChange({ subtitle: event.target.value })}
-          />
-        </label>
-      </details>
+      {!cover && (
+        <>
+          <section className="inspector-section">
+            <span className="section-label">THIS PAGE</span>
+            <label>
+              Page name
+              <input
+                aria-label="Page name"
+                maxLength={100}
+                value={page.title}
+                onChange={(event) =>
+                  onPageChange({ title: event.target.value || "Untitled page" })
+                }
+              />
+            </label>
+            <label>
+              Paper
+              <select
+                aria-label="Paper"
+                value={page.paper}
+                onChange={(event) =>
+                  onPageChange({ paper: event.target.value as "cream" })
+                }
+              >
+                <option value="cream">Warm cream</option>
+                <option value="lined">Notebook lines</option>
+                <option value="sage">Soft sage</option>
+              </select>
+            </label>
+            <div className="page-actions">
+              <button
+                className="secondary-button"
+                onClick={() => onAddPage()}
+                disabled={busy || book.pages.length >= 100}
+              >
+                <Plus size={14} /> Add page
+              </button>
+              <button
+                title="Delete selected page"
+                aria-label="Delete selected page"
+                className="icon-button danger-icon"
+                onClick={onDeletePage}
+                disabled={busy || book.pages.length <= 2}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+            <button
+              className="secondary-button template-picker-button"
+              onClick={() => setChoosingTemplate(true)}
+              disabled={busy || book.pages.length >= 100}
+            >
+              <LayoutTemplate size={14} /> New page from template
+            </button>
+            <div className="element-actions page-extra-actions">
+              <button
+                className="secondary-button"
+                onClick={onDuplicatePage}
+                disabled={busy || book.pages.length >= 100}
+              >
+                <Copy size={14} /> Duplicate page
+              </button>
+              <span className="page-position">
+                Page {pageIndex + 1} of {book.pages.length}
+              </span>
+              <button
+                className="secondary-button"
+                onClick={() => onMovePage(-1)}
+                disabled={busy || pageIndex <= 0}
+              >
+                <ArrowUp size={14} /> Move page earlier
+              </button>
+              <button
+                className="secondary-button"
+                onClick={() => onMovePage(1)}
+                disabled={busy || pageIndex >= book.pages.length - 1}
+              >
+                <ArrowDown size={14} /> Move page later
+              </button>
+            </div>
+            {book.pages.length <= 2 && (
+              <p className="field-hint">
+                Keep at least two pages in your book.
+              </p>
+            )}
+          </section>
+          <details className="inspector-section cover-settings">
+            <summary>Book cover details</summary>
+            <label>
+              Book title
+              <input
+                aria-label="Book title"
+                maxLength={100}
+                value={book.title}
+                onChange={(event) =>
+                  onBookChange({ title: event.target.value || "Untitled book" })
+                }
+              />
+            </label>
+            <label>
+              Subtitle
+              <textarea
+                aria-label="Subtitle"
+                rows={2}
+                maxLength={200}
+                value={book.subtitle}
+                onChange={(event) =>
+                  onBookChange({ subtitle: event.target.value })
+                }
+              />
+            </label>
+          </details>
+        </>
+      )}
       {cropping && element?.type === "image" && element.filename && (
         <CropDialog
           element={element}
@@ -579,7 +665,7 @@ export function Inspector({
           }}
         />
       )}
-      {choosingTemplate && (
+      {!cover && choosingTemplate && (
         <TemplateDialog
           onCancel={() => setChoosingTemplate(false)}
           onChoose={(template) => {
