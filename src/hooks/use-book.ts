@@ -155,5 +155,16 @@ export function useBook(initialBook: Book) {
       if (timer.current) clearTimeout(timer.current);
     };
   }, []);
-  return { book, update, save, status, error, undo, redo, ...historyState };
+  const getRevision = useCallback(() => revision.current, []);
+  return {
+    book,
+    update,
+    save,
+    getRevision,
+    status,
+    error,
+    undo,
+    redo,
+    ...historyState,
+  };
 }

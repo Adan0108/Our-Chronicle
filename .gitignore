@@ -8,6 +8,8 @@ artifacts/
 .test-storage/
 storage/*.tmp
 storage/images/.trash/
+storage/backups/
+storage/.incoming-*/
 .env*
 *.tsbuildinfo
 next-env.d.ts

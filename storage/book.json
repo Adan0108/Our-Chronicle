@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "revision": 135,
+  "revision": 148,
   "title": "Our Chronicle",
   "subtitle": "Little moments. A life well remembered.",
-  "updatedAt": "2026-10-03T12:58:02.501Z",
+  "updatedAt": "2026-10-03T13:38:12.175Z",
   "pages": [
     {
       "id": "page-1",
@@ -51,7 +51,7 @@
           "height": 245,
           "rotation": -3,
           "type": "image",
-          "filename": "sample-coffee.jpg",
+          "filename": "1e8c8b08-6ff6-4c26-9631-c2c3cca0a450.jpg",
           "caption": "our usual corner, our usual order",
           "frame": "polaroid"
         },
@@ -126,7 +126,7 @@
           "rotation": -2,
           "locked": true,
           "type": "image",
-          "filename": "56c5e565-0a67-4281-95fa-f839382d5d56.webp",
+          "filename": "7e1a8a30-4c0e-47db-94c1-5562d5beb52c.webp",
           "caption": "A moment worth keeping",
           "frame": "polaroid"
         },
@@ -139,7 +139,7 @@
           "rotation": -31,
           "locked": true,
           "type": "image",
-          "filename": "9540e394-37f1-431c-bef6-3d90974ddb6f.webp",
+          "filename": "6a8be26f-959c-4440-a665-108378ddb05a.webp",
           "caption": "A moment worth keeping",
           "frame": "polaroid",
           "crop": {
@@ -164,7 +164,7 @@
           "height": 260,
           "rotation": 3,
           "type": "image",
-          "filename": "sample-cafe.jpg",
+          "filename": "0115fc6a-857b-4fea-87a9-e60122e08b90.jpg",
           "caption": "a table for two • sunday morning",
           "frame": "polaroid"
         },
@@ -227,7 +227,7 @@
           "height": 265,
           "rotation": -2,
           "type": "image",
-          "filename": "sample-coast.jpg",
+          "filename": "37f70776-abba-4280-8c6f-9055f4fbfdfd.jpg",
           "caption": "salt in the air, sand in our shoes",
           "frame": "polaroid"
         },
@@ -286,7 +286,7 @@
           "height": 296,
           "rotation": -16,
           "type": "image",
-          "filename": "5cfc199f-25d2-48d9-b40f-ef0aa53d303b.webp",
+          "filename": "a9a7e27b-2b39-4de0-84c1-6f4c1dea6b84.webp",
           "caption": "A moment worth keeping",
           "frame": "polaroid"
         },

@@ -46,6 +46,7 @@ Both modes use the same local data folder and default address. This application 
 - **Pages and cover:** Add a blank page, duplicate a page, move it earlier/later, or choose **New page from template** (journal, single photo, two photos, collage). Select empty photo frames and use **Add photo to frame** to fill them. Deletion asks for confirmation, and at least two pages must remain. Expand **Book cover details** to edit the title/subtitle.
 - **Undo/redo:** Use the header controls or Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (also Ctrl+Y) outside text inputs. History keeps up to 50 steps in the current browser session; refresh clears it. Typing/slider changes are grouped until an autosave or another action. Undo/redo changes autosave normally.
 - **Autosave:** Changes save after a short pause. Wait for **Saved on this device** before refreshing or closing. Failed saves offer a retry; a stale-tab conflict requires reloading that tab to get the latest book.
+- **Book options:** The archive icon in the header opens export, import, and reset controls in either reading or edit mode.
 - **Smaller screens:** View full-size pages by scrolling sideways or using **Show left page** / **Show right page**. Use navigation arrows to turn pages. The editor appears below the book; **Edit selected item** and **Back to the page** help you move between them.
 
 ## Local data and backups
@@ -54,14 +55,25 @@ Personal content is written by the local Next.js server to files on the machine 
 
 - `storage/book.json` — book title, pages, text, image references, and element positions.
 - `storage/images/` — sample photographs and uploaded images.
+- `storage/backups/` — automatic safety ZIPs created before import or reset.
 
 Removed/replaced photos have recovery copies in `storage/images/.trash/` for undo, retained for up to seven days and 3,000 files. They are not served as active images. Cleanup runs on subsequent saves.
 
 Content is stored in this folder, **not in a database, browser storage, or cloud service**. Uploads are served through the API and do not enter `public/` or source folders.
 
-**Back up the entire `storage/` folder while the app is stopped.** It contains both the book state and its images; copying only the JSON will not preserve the photographs. To restore, stop the app, replace `storage/` with your backup, and restart.
+For a portable manual backup, use **Book options → Export Book** and keep the downloaded ZIP on another drive. You can also **back up the entire `storage/` folder while the app is stopped**; copying only the JSON will not preserve the photographs. To restore a folder backup, stop the app, replace `storage/` with your backup, and restart.
 
 Sample-photo attribution and license details are in [storage/images/README.md](storage/images/README.md).
+
+## Export, import, and reset
+
+- **Export Book** saves pending edits and downloads `our-chronicle-YYYY-MM-DD.zip`. The archive contains `book.json`, `manifest.json` (`format: "our-chronicle"`, `formatVersion: 1`, export timestamp), and `images/` with only the photographs referenced by the book. Shared photos appear once. Recovery files, safety backups, unused uploads, and repository/build files are excluded.
+- **Import Book** lets you choose an exported ZIP, then **Import and replace** confirms replacement. The complete archive is validated before changing the book. A safety backup of the current book and referenced photos is saved to `storage/backups/` first. The app reloads at the cover; page order, formatting, crop, rotation, layers, and locks are retained. Internal image filenames may change; image bytes are preserved.
+- **Reset Book → Reset to sample book** explicitly confirms replacing the current pages/photos with the sample scrapbook. It also creates a safety ZIP first. Canceling makes no replacement. If sample photographs are unavailable or damaged, built-in sample artwork is used.
+
+Import/reset begin a fresh undo session. To recover the previous book, choose **Import Book** and select its safety ZIP from `storage/backups/`. The success message identifies the backup filename. Safety backups stay local and are retained until you remove them; copy important ones elsewhere for protection against disk failure.
+
+Imports accept Our Chronicle format version 1 only. Archive limits are 250 MB ZIP / 500 MB uncompressed content, 1 MB book JSON, and 10 MB / 24 megapixels per non-animated JPEG, PNG, or WebP. Unsafe paths, duplicate entries, encryption, links, missing/invalid images, and unsupported versions are rejected. Import/reset abort if a safety backup cannot be written or another tab changed the book.
 
 ## Scripts and tests
 
@@ -92,7 +104,7 @@ Formatting commands: `npm run format` and `npm run format:check`.
 - Text boxes do not expand automatically; resize them when longer text needs more space.
 - Uploaded images are converted to WebP and limited to 2400 pixels on the longest edge. Original uploaded files are not retained. Interrupted uploads can leave unused image files.
 - Undo history is session-only; very long sessions can outlast image-recovery retention. Crop uses the photo frame's aspect ratio.
-- No import/export UI, stickers, or cloud sync.
+- Import replaces the whole book; there is no merge or backup-list UI. Safety ZIPs require manual cleanup. No stickers or cloud sync.
 
 ## Project Structure
 
@@ -101,7 +113,7 @@ Our-Chronicle/
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── book/route.ts          # Read and save book data
+│   │   │   ├── book/                  # Read/save, export, import, and reset routes
 │   │   │   └── images/               # Upload, serve, and delete images
 │   │   ├── page.tsx                  # Load the book and render the app
 │   │   ├── layout.tsx                # Root layout and metadata
@@ -110,6 +122,7 @@ Our-Chronicle/
 │   │   ├── book/
 │   │   │   ├── cover.tsx             # Front cover in the native page-flip surface
 │   │   │   ├── reader.tsx            # Page-flip library integration
+│   │   │   ├── book-actions.tsx      # Export/import/reset dialogs
 │   │   │   └── page-renderer.tsx     # Data-driven page rendering
 │   │   ├── editor/                   # Inspector, crop/template dialogs, deletion
 │   │   └── scrapbook.tsx             # Reading/editing UI and interactions
@@ -121,20 +134,27 @@ Our-Chronicle/
 │   │   └── storage/
 │   │       ├── index.ts              # Storage interface and instance
 │   │       ├── local.ts              # Filesystem storage and safe writes
+│   │       ├── archive.ts            # Versioned ZIP encoding and validation
+│   │       ├── errors.ts             # Storage/API error type
 │   │       └── sample.ts             # Default book and fallback artwork
 │   └── types/
 │       └── book.ts                   # Zod schemas and TypeScript types
 ├── storage/
 │   ├── book.json                     # Local book state
-│   └── images/                       # Local images and sample attribution
+│   ├── images/                       # Local images and sample attribution
+│   └── backups/                      # Safety ZIPs (created on demand)
 ├── tests/
 │   ├── scrapbook.spec.ts             # Browser flows and API checks
-│   └── editor-phase.spec.ts           # Formatting, layers, templates, and history
+│   ├── editor-phase.spec.ts           # Formatting, layers, templates, and history
+│   ├── portability.spec.ts            # Round trips, backups, and archive safety
+│   └── storage-safety.spec.ts         # Failed backup/commit rollback checks
 ├── playwright.config.ts             # Isolated E2E server configuration
 └── package.json                      # Dependencies and scripts
 ```
 
 Pages contain arrays of text and image elements rather than hard-coded page components. Array order defines layers from back to front. Optional formatting, crop, and lock fields keep existing books compatible; absent fields retain their original presets. The reader uses `react-pageflip` / StPageFlip; the editor uses `react-rnd` and `react-easy-crop` for crop interactions. API routes validate data and call the storage interface, keeping filesystem persistence separate from the UI.
+
+Portability uses `yazl` to write ZIPs, `yauzl` to read bounded entries, and `buffer-crc32` to verify integrity. Imports stage images under fresh safe names and atomically replace the book JSON after creating a safety backup. Earlier files are archived only after that commit; ordinary undo recovery remains bounded and is not exported.
 
 ### Where to change things
 
@@ -165,6 +185,12 @@ src/hooks/use-book.ts
 
 Persistence:
 src/lib/storage/
+
+Export/import/reset UI:
+src/components/book/book-actions.tsx
+
+ZIP format and validation:
+src/lib/storage/archive.ts
 
 Default sample book:
 src/lib/storage/sample.ts

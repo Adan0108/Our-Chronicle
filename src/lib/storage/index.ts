@@ -1,6 +1,8 @@
 import { LocalBookStorage } from "./local";
 import type { Book } from "@/types/book";
 
+export type BookReplacement = { book: Book; backupFilename: string };
+
 export interface BookStorage {
   readBook(): Promise<Book>;
   saveBook(book: Book): Promise<Book>;
@@ -10,15 +12,11 @@ export interface BookStorage {
   ): Promise<{ filename: string; width: number; height: number }>;
   readImage(filename: string): Promise<Buffer>;
   deleteImage(filename: string): Promise<void>;
+  exportBook(expectedRevision?: number): Promise<Buffer>;
+  importBook(bytes: Buffer, expectedRevision: number): Promise<BookReplacement>;
+  resetBook(expectedRevision: number): Promise<BookReplacement>;
 }
-export class StorageError extends Error {
-  constructor(
-    message: string,
-    public status = 400,
-  ) {
-    super(message);
-  }
-}
+export { StorageError } from "./errors";
 const globalStorage = globalThis as typeof globalThis & {
   chronicleStorage?: BookStorage;
 };

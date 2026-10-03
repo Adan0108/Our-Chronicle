@@ -9,6 +9,7 @@ import {
   readdir,
   stat,
   utimes,
+  rm,
 } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
@@ -16,7 +17,15 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { bookSchema, imageNameSchema, type Book } from "@/types/book";
 import { createSampleBook, sampleArtwork } from "./sample";
-import { StorageError, type BookStorage } from "./index";
+import type { BookReplacement, BookStorage } from "./index";
+import { StorageError } from "./errors";
+import {
+  CONTENT_MAX_BYTES,
+  decodeArchive,
+  encodeArchive,
+  referencedImages,
+  validateImage,
+} from "./archive";
 
 const TRASH_LIMIT = 3000;
 const TRASH_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
@@ -110,6 +119,137 @@ export class LocalBookStorage implements BookStorage {
       await unlink(temporary).catch(() => undefined);
     }
   }
+  private checkRevision(book: Book, expected: number) {
+    if (book.revision !== expected)
+      throw new StorageError(
+        "This book changed in another tab. Reload to get the latest version.",
+        409,
+      );
+  }
+  private async bookImages(book: Book) {
+    const images = new Map<string, Buffer>();
+    let total = 0;
+    for (const filename of referencedImages(book)) {
+      const info = await stat(this.imagePath(filename)).catch((error) => {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+          throw new StorageError(
+            `Image ${filename} is missing. Restore it before exporting.`,
+          );
+        throw error;
+      });
+      if (info.size > 10 * 1024 * 1024 || total + info.size > CONTENT_MAX_BYTES)
+        throw new StorageError(
+          "The book exceeds the image or archive size limits.",
+          413,
+        );
+      const bytes = await this.readImage(filename);
+      total += bytes.length;
+      if (bytes.length > 10 * 1024 * 1024 || total > CONTENT_MAX_BYTES)
+        throw new StorageError(
+          "The book exceeds the image or archive size limits.",
+          413,
+        );
+      images.set(filename, bytes);
+    }
+    return images;
+  }
+  private async safetyBackup(book: Book, reason: "import" | "reset") {
+    const bytes = await encodeArchive(book, await this.bookImages(book));
+    const directory = path.join(this.root, "backups");
+    await mkdir(directory, { recursive: true });
+    const date = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = `our-chronicle-${date}-before-${reason}-${randomUUID()}.zip`;
+    const temporary = path.join(directory, `${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporary, bytes, { flag: "wx" });
+      await rename(temporary, path.join(directory, filename));
+    } finally {
+      await unlink(temporary).catch(() => undefined);
+    }
+    return filename;
+  }
+  private async replaceBook(
+    previous: Book,
+    incoming: Book,
+    images: Map<string, Buffer>,
+    reason: "import" | "reset",
+  ): Promise<BookReplacement> {
+    // Archive paths never become filesystem paths. New names also prevent stale
+    // immutable browser image caches from showing a different book's photograph.
+    const names = new Map(
+      [...images.keys()].map((filename) => [
+        filename,
+        `${randomUUID()}${path.extname(filename)}`,
+      ]),
+    );
+    const saved = bookSchema.parse({
+      ...incoming,
+      revision: previous.revision + 1,
+      updatedAt: new Date().toISOString(),
+      pages: incoming.pages.map((page) => ({
+        ...page,
+        elements: page.elements.map((element) =>
+          element.type === "image" && element.filename
+            ? { ...element, filename: names.get(element.filename) }
+            : element,
+        ),
+      })),
+    });
+    // If backup creation fails, no current book/image content has been touched.
+    const backupFilename = await this.safetyBackup(previous, reason);
+    const stage = path.join(this.root, `.incoming-${randomUUID()}`);
+    const promoted: string[] = [];
+    let committed = false;
+    try {
+      await mkdir(stage);
+      for (const [original, bytes] of images) {
+        const filename = names.get(original)!;
+        await writeFile(path.join(stage, filename), bytes, { flag: "wx" });
+      }
+      for (const filename of names.values()) {
+        await copyFile(
+          path.join(stage, filename),
+          this.imagePath(filename),
+          constants.COPYFILE_EXCL,
+        );
+        promoted.push(filename);
+      }
+      // Commit only after every new image exists. Until this rename, the old
+      // book still references untouched original files, including after a crash.
+      await this.atomicWrite(saved);
+      committed = true;
+      const kept = referencedImages(saved);
+      const entries = await readdir(path.join(this.root, "images"), {
+        withFileTypes: true,
+      }).catch(() => []);
+      const removed = new Set(
+        entries
+          .filter(
+            (entry) =>
+              entry.isFile() &&
+              imageNameSchema.safeParse(entry.name).success &&
+              !kept.has(entry.name),
+          )
+          .map((entry) => entry.name),
+      );
+      // Cleanup happens after commit; existing undo recovery remains bounded.
+      await this.archiveImages(removed).catch(() => undefined);
+      await this.pruneTrash().catch(() => undefined);
+      return { book: saved, backupFilename };
+    } finally {
+      if (!committed)
+        for (const filename of promoted)
+          await unlink(this.imagePath(filename)).catch(() => undefined);
+      // This is an internally generated direct child, never an imported path.
+      if (
+        path.dirname(stage) === this.root &&
+        /^\.incoming-[0-9a-f-]+$/.test(path.basename(stage))
+      )
+        await rm(stage, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+    }
+  }
   private async readOrCreate(): Promise<Book> {
     await mkdir(path.join(this.root, "images"), { recursive: true });
     try {
@@ -134,6 +274,73 @@ export class LocalBookStorage implements BookStorage {
   }
   readBook() {
     return this.locked(() => this.readOrCreate());
+  }
+  exportBook(expectedRevision?: number) {
+    return this.locked(async () => {
+      const book = await this.readOrCreate();
+      if (expectedRevision !== undefined)
+        this.checkRevision(book, expectedRevision);
+      return encodeArchive(book, await this.bookImages(book));
+    });
+  }
+  async importBook(bytes: Buffer, expectedRevision: number) {
+    // Validation/decompression finishes before taking the write queue or making
+    // a backup. Invalid input never modifies the current scrapbook.
+    const imported = await decodeArchive(bytes);
+    return this.locked(async () => {
+      const previous = await this.readOrCreate();
+      this.checkRevision(previous, expectedRevision);
+      return this.replaceBook(
+        previous,
+        imported.book,
+        imported.images,
+        "import",
+      );
+    });
+  }
+  resetBook(expectedRevision: number) {
+    return this.locked(async () => {
+      const previous = await this.readOrCreate();
+      this.checkRevision(previous, expectedRevision);
+      const book = bookSchema.parse(createSampleBook());
+      const images = new Map<string, Buffer>();
+      for (const filename of referencedImages(book)) {
+        let bytes: Buffer;
+        try {
+          bytes = await this.readImage(filename);
+        } catch (error) {
+          if (!(error instanceof StorageError) || error.status !== 404)
+            throw error;
+          try {
+            bytes = await readFile(this.trashPath(filename));
+          } catch (archiveError) {
+            if ((archiveError as NodeJS.ErrnoException).code !== "ENOENT")
+              throw archiveError;
+            // The same built-in artwork used by first-run initialization keeps
+            // reset usable even if old sample files were removed or expired.
+            const artwork =
+              sampleArtwork[filename as keyof typeof sampleArtwork];
+            if (!artwork)
+              throw new StorageError("Sample photograph is missing", 500);
+            bytes = await sharp(Buffer.from(artwork))
+              .jpeg({ quality: 90 })
+              .toBuffer();
+          }
+        }
+        try {
+          await validateImage(filename, bytes);
+        } catch (error) {
+          if (!(error instanceof StorageError)) throw error;
+          const artwork = sampleArtwork[filename as keyof typeof sampleArtwork];
+          if (!artwork) throw error;
+          bytes = await sharp(Buffer.from(artwork))
+            .jpeg({ quality: 90 })
+            .toBuffer();
+        }
+        images.set(filename, bytes);
+      }
+      return this.replaceBook(previous, book, images, "reset");
+    });
   }
   saveBook(incoming: Book) {
     return this.locked(async () => {

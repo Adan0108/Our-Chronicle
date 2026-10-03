@@ -34,17 +34,35 @@ import { Reader, type ReaderHandle } from "./book/reader";
 import { PageRenderer, ImageRevisionContext } from "./book/page-renderer";
 import { Inspector } from "./editor/inspector";
 import { DeletePageDialog } from "./editor/delete-page-dialog";
+import { BookActions } from "./book/book-actions";
 
-export function Scrapbook({ initialBook }: { initialBook: Book }) {
-  const { book, update, save, status, error, undo, redo, canUndo, canRedo } =
-    useBook(initialBook);
+export function Scrapbook({
+  initialBook,
+  initialNotice = "",
+}: {
+  initialBook: Book;
+  initialNotice?: string;
+}) {
+  const {
+    book,
+    update,
+    save,
+    getRevision,
+    status,
+    error,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = useBook(initialBook);
   const [opened, setOpened] = useState(false);
   const [editing, setEditing] = useState(false);
   const [spread, setSpread] = useState(0);
   const [activePageId, setActivePageId] = useState(book.pages[0].id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(initialNotice);
+  const [transferBusy, setTransferBusy] = useState(false);
   const [deletePage, setDeletePage] = useState(false);
   const [contentsOpen, setContentsOpen] = useState(false);
   const reader = useRef<ReaderHandle | null>(null);
@@ -110,7 +128,7 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
   );
   const applyHistory = useCallback(
     (direction: "undo" | "redo") => {
-      if (busy) return;
+      if (busy || transferBusy) return;
       const restored = direction === "undo" ? undo() : redo();
       if (!restored) return;
       const restoredPage = restored.pages.find(
@@ -144,7 +162,7 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
             : null,
       );
     },
-    [activePageId, book.pages, busy, redo, selectedId, undo],
+    [activePageId, book.pages, busy, transferBusy, redo, selectedId, undo],
   );
   useEffect(() => {
     if (!editing) return;
@@ -415,13 +433,18 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
             </span>
           </button>
           <div className="header-actions">
+            <BookActions
+              disabled={busy || transferBusy}
+              onBusyChange={setTransferBusy}
+              onPrepare={async () => ((await save()) ? getRevision() : null)}
+            />
             {editing && (
               <div className="history-controls" aria-label="Edit history">
                 <button
                   className="history-button"
                   aria-label="Undo"
                   title="Undo (Ctrl/Cmd+Z)"
-                  disabled={busy || !canUndo}
+                  disabled={busy || transferBusy || !canUndo}
                   onClick={() => applyHistory("undo")}
                 >
                   <Undo2 size={16} />
@@ -430,7 +453,7 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
                   className="history-button"
                   aria-label="Redo"
                   title="Redo (Ctrl/Cmd+Shift+Z)"
-                  disabled={busy || !canRedo}
+                  disabled={busy || transferBusy || !canRedo}
                   onClick={() => applyHistory("redo")}
                 >
                   <Redo2 size={16} />
@@ -482,6 +505,7 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
             <button
               className={`primary-button ${editing ? "editing-toggle" : ""}`}
               aria-pressed={editing}
+              disabled={busy || transferBusy}
               onClick={toggleEdit}
             >
               {editing ? <Check size={15} /> : <Pencil size={15} />}
@@ -572,7 +596,7 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
             )}
             {(error || notice) && (
               <div
-                className="notice"
+                className={`notice ${!error && notice === initialNotice ? "notice-success" : ""}`}
                 role="alert"
                 aria-label="Scrapbook message"
               >

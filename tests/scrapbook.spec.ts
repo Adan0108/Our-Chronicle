@@ -151,6 +151,9 @@ test("native cover drag opens and closes only after returning to the first sprea
   await page.screenshot({
     path: testInfo.outputPath("native-cover-opening-drag.png"),
   });
+  // A headed screenshot can deliver the desktop pointer's position while held.
+  // Restore the intended release point so the native engine uses this gesture.
+  await page.mouse.move(cover.x - 180, cover.y + cover.height - 130);
   await page.mouse.up();
   await expect(page.getByTestId("page-indicator")).toContainText("1 – 2");
   await expect(page.locator(".book-spread")).toHaveCSS("transform", "none");

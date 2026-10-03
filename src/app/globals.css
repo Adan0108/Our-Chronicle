@@ -870,6 +870,22 @@ h1 {
   font-family: var(--serif);
   font-style: italic;
 }
+/* Native page-flip owns each page's display value. Center the blank leaf's
+   decoration independently so its inline display:block does not undo flex. */
+.blank-page > svg {
+  position: absolute;
+  left: calc(50% - 12.5px);
+  top: calc(50% - 33px);
+  pointer-events: none;
+}
+.blank-page > span {
+  position: absolute;
+  left: 0;
+  top: calc(50% + 8px);
+  width: 100%;
+  text-align: center;
+  pointer-events: none;
+}
 .inspector {
   width: 250px;
   flex-shrink: 0;
@@ -1217,6 +1233,16 @@ h1 {
   font-size: 11px;
   text-decoration: underline;
   white-space: nowrap;
+}
+.notice.notice-success {
+  background: #edf0e5;
+  color: #58654e;
+  border-color: #d6deca;
+}
+.notice.notice-success span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
 }
 .modal-backdrop {
   position: fixed;
@@ -1700,5 +1726,166 @@ h1 {
   }
   html {
     scroll-behavior: auto;
+  }
+}
+.book-options-toggle {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 5px;
+  color: #796b59;
+}
+.book-options-toggle:hover,
+.book-options-toggle:focus-visible {
+  background: #eee9df;
+}
+.book-actions-dialog {
+  margin: auto;
+  width: min(490px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 26px;
+  border: 1px solid #e0d6c4;
+  border-radius: 8px;
+  background: #fbf8ef;
+  color: var(--ink);
+  box-shadow: 0 18px 75px #30251945;
+}
+.book-actions-dialog::backdrop {
+  background: #30282066;
+  backdrop-filter: blur(3px);
+}
+.book-actions-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.book-actions-heading h2 {
+  margin: 2px 0 12px;
+  font-family: var(--serif);
+  font-size: 25px;
+  font-weight: 400;
+  letter-spacing: -0.4px;
+}
+.book-actions-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  color: #897860;
+}
+.book-actions-close:hover {
+  background: #eee9df;
+}
+.book-actions-description {
+  margin: 0 0 20px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #897860;
+}
+.book-action-options {
+  display: grid;
+  gap: 10px;
+}
+.book-action-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #e0d7c5;
+  border-radius: 5px;
+  background: #f7f2e6;
+  text-align: left;
+  color: #65715b;
+}
+.book-action-option:hover {
+  background: #eee9dc;
+}
+.book-action-option strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.book-action-option small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #897860;
+}
+.book-action-reset {
+  color: #a57460;
+}
+.archive-picker {
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+  color: #74654f;
+}
+.archive-picker input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ded5c4;
+  border-radius: 5px;
+  background: #fffdf7;
+  color: var(--ink);
+  font-size: 11px;
+}
+.archive-picker input::file-selector-button {
+  margin-right: 10px;
+  padding: 7px 10px;
+  border: 1px solid #ded5c4;
+  border-radius: 4px;
+  background: #f1eddf;
+  color: var(--ink);
+  cursor: pointer;
+}
+.book-actions-backup-hint {
+  margin: 16px 0 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #897860;
+}
+.book-actions-backup-hint code {
+  color: #74654f;
+}
+.book-action-error,
+.book-action-success,
+.book-action-progress {
+  margin: 16px 0 0;
+  padding: 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.book-action-error {
+  background: #f4e5dd;
+  color: #975b44;
+}
+.book-action-success {
+  background: #e9edde;
+  color: #58654e;
+}
+.book-action-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  color: #786951;
+}
+@media (max-width: 580px) {
+  .book-actions-dialog {
+    padding: 20px;
+  }
+  .book-actions-heading h2 {
+    font-size: 23px;
+  }
+  .book-actions-dialog .dialog-actions {
+    flex-wrap: wrap;
   }
 }
