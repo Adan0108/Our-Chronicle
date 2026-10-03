@@ -16,9 +16,44 @@ async function open(page: Page) {
     .getByRole("button", { name: "Open scrapbook", exact: true })
     .click();
   await expect(page.getByTestId("page-indicator")).toContainText("1 – 2");
+  // Native opening finishes before the surrounding spread finishes recentering.
+  await expect(page.locator(".book-spread")).toHaveCSS("transform", "none");
 }
 async function saved(page: Page) {
   await expect(page.getByRole("status")).toHaveText("Saved on this device");
+}
+
+async function dragSpread(
+  page: Page,
+  direction: "forward" | "backward",
+  commit = true,
+) {
+  await page.mouse.move(20, 30);
+  const rect = await page.locator(".book-spread").boundingBox();
+  if (!rect) throw new Error("Book spread missing");
+  const forward = direction === "forward";
+  await page.mouse.move(
+    rect.x + (forward ? rect.width - 8 : 8),
+    rect.y + rect.height - 8,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    rect.x + (forward ? 100 : commit ? rect.width - 100 : 100),
+    rect.y + rect.height - 130,
+    { steps: 35 },
+  );
+  await page.mouse.up();
+}
+
+async function closed(page: Page) {
+  await expect(
+    page.getByRole("button", { name: "Open scrapbook", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("page-indicator")).toHaveCount(0);
+  await expect(page.locator(".book-spread")).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, -220, 0)",
+  );
 }
 
 test("opens the cover, turns pages with buttons, click, and mouse drag", async ({
@@ -69,6 +104,155 @@ test("opens the cover, turns pages with buttons, click, and mouse drag", async (
   await page.mouse.up();
   await expect(page.getByTestId("page-indicator")).toContainText("3 – 4");
   expect(errors).toEqual([]);
+});
+
+test("native cover drag opens and closes only after returning to the first spread", async ({
+  page,
+  request,
+}, testInfo) => {
+  const current: Book = await (await request.get("/api/book")).json();
+  const response = await request.put("/api/book", {
+    data: {
+      ...current,
+      pages: [
+        ...current.pages,
+        {
+          id: "closing-page-5",
+          title: "A little more to remember",
+          paper: "cream",
+          elements: [],
+        },
+        {
+          id: "closing-page-6",
+          title: "The next chapter",
+          paper: "cream",
+          elements: [],
+        },
+      ],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const originalBook: Book = await (await request.get("/api/book")).json();
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await closed(page);
+  const originalReader = await page.locator(".flipbook").elementHandle();
+  if (!originalReader) throw new Error("Reader missing");
+  const cover = await page
+    .getByRole("button", { name: "Open scrapbook", exact: true })
+    .boundingBox();
+  if (!cover) throw new Error("Front cover missing");
+  await page.mouse.move(cover.x + cover.width - 8, cover.y + cover.height - 8);
+  await page.mouse.down();
+  await page.mouse.move(cover.x - 180, cover.y + cover.height - 130, {
+    steps: 35,
+  });
+  await page.screenshot({
+    path: testInfo.outputPath("native-cover-opening-drag.png"),
+  });
+  await page.mouse.up();
+  await expect(page.getByTestId("page-indicator")).toContainText("1 – 2");
+  await expect(page.locator(".book-spread")).toHaveCSS("transform", "none");
+
+  // Releasing on the original side of the spine cancels closing.
+  await dragSpread(page, "backward", false);
+  await expect(page.getByTestId("page-1")).toHaveClass(/--simple/);
+  await expect(page.getByTestId("page-indicator")).toContainText("1 – 2");
+  await expect(
+    page.getByRole("button", { name: "Open scrapbook", exact: true }),
+  ).toHaveCount(0);
+
+  for (const indicator of ["3 – 4", "5 – 6"]) {
+    await dragSpread(page, "forward");
+    await expect(page.getByTestId("page-indicator")).toContainText(indicator);
+    await expect(
+      page.getByRole("button", { name: "Close scrapbook", exact: true }),
+    ).toHaveCount(0);
+  }
+  for (const indicator of ["3 – 4", "1 – 2"]) {
+    await dragSpread(page, "backward");
+    await expect(page.getByTestId("page-indicator")).toContainText(indicator);
+  }
+
+  for (let cycle = 0; cycle < 3; cycle++) {
+    await dragSpread(page, "backward");
+    await closed(page);
+    expect(
+      await originalReader.evaluate(
+        (node) => node === document.querySelector(".flipbook"),
+      ),
+    ).toBeTruthy();
+    if (cycle === 0)
+      await page.screenshot({
+        path: testInfo.outputPath("native-cover-closed.png"),
+      });
+    await page
+      .getByRole("button", { name: "Open scrapbook", exact: true })
+      .click();
+    await expect(page.getByTestId("page-indicator")).toContainText("1 – 2");
+    await expect(page.locator(".book-spread")).toHaveCSS("transform", "none");
+    expect(
+      await originalReader.evaluate(
+        (node) => node === document.querySelector(".flipbook"),
+      ),
+    ).toBeTruthy();
+  }
+  expect(await (await request.get("/api/book")).json()).toEqual(originalBook);
+  expect(errors).toEqual([]);
+});
+
+test("saved edits survive closing, keyboard reopening, and refresh", async ({
+  page,
+  request,
+}, testInfo) => {
+  await open(page);
+  await page
+    .getByRole("button", { name: "Edit scrapbook", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Edit text: The little things", exact: true })
+    .click();
+  const text = "Kept close, even when the book is shut.";
+  await page.getByRole("textbox", { name: "Text content" }).fill(text);
+  await saved(page);
+  const savedBook: Book = await (await request.get("/api/book")).json();
+  await page.getByRole("button", { name: "Done editing", exact: true }).click();
+  await expect(page.getByTestId("page-1")).toContainText(text);
+  await page
+    .getByRole("button", { name: "Close scrapbook", exact: true })
+    .click();
+  await closed(page);
+  const cover = page.getByRole("button", {
+    name: "Open scrapbook",
+    exact: true,
+  });
+  await expect(cover).toBeFocused();
+  await cover.press("Enter");
+  await expect(page.getByTestId("page-indicator")).toContainText("1 – 2");
+  await expect(page.locator(".book-spread")).toHaveCSS("transform", "none");
+  await expect(page.getByTestId("page-1")).toContainText(text);
+  await page.screenshot({
+    path: testInfo.outputPath("reopened-persisted-memory.png"),
+  });
+  await dragSpread(page, "backward");
+  await closed(page);
+  expect(await (await request.get("/api/book")).json()).toEqual(savedBook);
+  await page.reload();
+  await closed(page);
+  await page
+    .getByRole("button", { name: "Open scrapbook", exact: true })
+    .press("Space");
+  await expect(page.getByTestId("page-1")).toContainText(text);
+  await page
+    .getByRole("button", { name: "Edit scrapbook", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: `Edit text: ${text}`, exact: true })
+    .click();
+  await expect(page.getByRole("textbox", { name: "Text content" })).toHaveValue(
+    text,
+  );
 });
 
 test("edits text, persists after refresh, adds and deletes text", async ({
@@ -534,5 +718,184 @@ test("laptop editor displays the complete spread without horizontal clipping", a
     pageBox &&
       regionBox &&
       pageBox.x + pageBox.width <= regionBox.x + regionBox.width,
+  ).toBeTruthy();
+});
+
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 1280, height: 720 },
+]) {
+  test(`book and lightweight editor fit at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await expect(
+      page.getByRole("button", { name: "Open scrapbook", exact: true }),
+    ).toHaveCSS("opacity", "1");
+    await page.screenshot({ path: testInfo.outputPath("polished-cover.png") });
+    await page
+      .getByRole("button", { name: "Open scrapbook", exact: true })
+      .click();
+    await expect(
+      page.getByRole("complementary", { name: "Scrapbook editor" }),
+    ).toHaveCount(0);
+    await expect(page.locator(".editable-element")).toHaveCount(0);
+    const spread = page.locator(".book-spread");
+    async function fits() {
+      const box = await spread.boundingBox();
+      const controls = await page.locator(".book-controls").boundingBox();
+      expect(
+        box && box.y >= 0 && box.y + box.height <= viewport.height,
+      ).toBeTruthy();
+      expect(
+        controls && controls.y + controls.height <= viewport.height,
+      ).toBeTruthy();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBeTruthy();
+      await expect(
+        page.getByRole("button", { name: "Show right page", exact: true }),
+      ).toHaveCount(0);
+    }
+    async function readable(pageNumbers: number[]) {
+      for (const number of pageNumbers) {
+        const clipped = await page
+          .getByTestId(`page-${number}`)
+          .locator(".scrap-text")
+          .evaluateAll((nodes) =>
+            nodes
+              .filter((node) => node.scrollHeight > node.clientHeight + 1)
+              .map((node) => node.textContent),
+          );
+        expect(clipped).toEqual([]);
+      }
+    }
+    await fits();
+    await readable([1, 2]);
+    await expect(page.getByTestId("page-2").getByRole("img")).toHaveJSProperty(
+      "naturalWidth",
+      900,
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("polished-reading.png"),
+    });
+    await page.getByRole("button", { name: "Contents", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Contents", exact: true }),
+    ).toHaveAttribute("aria-expanded", "true");
+    await page
+      .getByRole("button", {
+        name: "Somewhere by the sea Page 03",
+        exact: true,
+      })
+      .click();
+    await expect(page.getByTestId("page-indicator")).toContainText("3 – 4");
+    await expect(
+      page.getByRole("button", { name: "Contents", exact: true }),
+    ).toHaveAttribute("aria-expanded", "false");
+    await readable([3, 4]);
+    await expect(page.getByTestId("page-3").getByRole("img")).toHaveJSProperty(
+      "naturalWidth",
+      900,
+    );
+    await page.mouse.move(20, 30);
+    await page.screenshot({
+      path: testInfo.outputPath("polished-second-spread.png"),
+    });
+    await page
+      .getByRole("button", { name: "Edit scrapbook", exact: true })
+      .click();
+    await page
+      .getByRole("button", {
+        name: "Edit text: Things to remember",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByRole("textbox", { name: "Text content" }),
+    ).toHaveValue("Things to remember");
+    await fits();
+    const bookBox = await spread.boundingBox();
+    const editorBox = await page
+      .getByRole("complementary", { name: "Scrapbook editor" })
+      .boundingBox();
+    expect(
+      bookBox && editorBox && editorBox.x >= bookBox.x + bookBox.width,
+    ).toBeTruthy();
+    await page
+      .getByRole("button", { name: "Done editing", exact: true })
+      .hover();
+    await expect(
+      page.getByRole("button", { name: "Done editing", exact: true }),
+    ).toHaveCSS("color", "rgb(63, 77, 53)");
+    await page.mouse.move(20, 30);
+    await page.screenshot({
+      path: testInfo.outputPath("polished-editing.png"),
+    });
+    await page
+      .getByRole("button", { name: "Done editing", exact: true })
+      .click();
+    await expect(page.locator(".editable-element")).toHaveCount(0);
+    await expect(page.getByTestId("page-indicator")).toContainText("3 – 4");
+  });
+}
+
+test("tablet preserves full-size pages and connects selection to the editor", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await open(page);
+  await page
+    .getByRole("button", { name: "Show right page", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      page
+        .getByRole("region", { name: "Book spread" })
+        .evaluate((node) => node.scrollLeft),
+    )
+    .toBeGreaterThan(100);
+  await page.screenshot({
+    path: testInfo.outputPath("polished-tablet-reading.png"),
+  });
+  await page
+    .getByRole("button", { name: "Edit scrapbook", exact: true })
+    .click();
+  await page
+    .getByRole("button", {
+      name: "Edit text: A Sunday kind of love",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole("button", { name: "Edit selected item", exact: true })
+    .click();
+  await expect
+    .poll(async () => {
+      const box = await page
+        .getByRole("textbox", { name: "Text content" })
+        .boundingBox();
+      return box !== null && box.y >= 0 && box.y + box.height <= 1024;
+    })
+    .toBeTruthy();
+  await page.screenshot({
+    path: testInfo.outputPath("polished-tablet-editing.png"),
+  });
+  await page
+    .getByRole("button", { name: "Back to the page", exact: true })
+    .click();
+  await expect
+    .poll(async () => {
+      const box = await page.locator(".book-spread").boundingBox();
+      return box !== null && box.y >= 0 && box.y + box.height <= 1024;
+    })
+    .toBeTruthy();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
   ).toBeTruthy();
 });

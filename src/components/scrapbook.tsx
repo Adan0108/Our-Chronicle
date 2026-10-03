@@ -1,19 +1,16 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { motion } from "motion/react";
 import {
   ArrowRight,
   BookOpen,
+  BookX,
   Check,
   ChevronLeft,
   ChevronRight,
-  Coffee,
   Feather,
-  Heart,
   Leaf,
   LoaderCircle,
-  LockKeyhole,
   Pencil,
   Save,
   Sparkles,
@@ -36,9 +33,24 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [deletePage, setDeletePage] = useState(false);
+  const [contentsOpen, setContentsOpen] = useState(false);
   const reader = useRef<ReaderHandle | null>(null);
   const spreadScrollRef = useRef<HTMLDivElement>(null);
+  const wasOpened = useRef(false);
   const [needsPan, setNeedsPan] = useState(false);
+  useEffect(() => {
+    const closed = !opened && wasOpened.current;
+    wasOpened.current = opened;
+    if (closed) {
+      // The wrapper reconciles/reinserts its page nodes in effects; hand off focus after that work.
+      const frame = requestAnimationFrame(() =>
+        spreadScrollRef.current
+          ?.querySelector<HTMLElement>(".native-cover")
+          ?.focus({ preventScroll: true }),
+      );
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [opened]);
   useEffect(() => {
     const node = spreadScrollRef.current;
     if (!node) return;
@@ -56,6 +68,15 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
     observer.observe(node);
     return () => observer.disconnect();
   }, [opened, editing]);
+  useEffect(() => {
+    if (!editing && needsPan) {
+      const node = spreadScrollRef.current;
+      if (node)
+        node.scrollLeft = opened
+          ? 0
+          : (node.scrollWidth - node.clientWidth) / 2;
+    }
+  }, [opened, editing, needsPan]);
   const activePage =
     book.pages.find((page) => page.id === activePageId) || book.pages[0];
   const selectedElement = activePage.elements.find(
@@ -67,10 +88,11 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
   );
 
   function selectPage(index: number) {
+    setContentsOpen(false);
     setOpened(true);
     setActivePageId(book.pages[index].id);
     setSelectedId(null);
-    if (editing || !opened) setSpread(Math.floor(index / 2) * 2);
+    if (editing) setSpread(Math.floor(index / 2) * 2);
     else reader.current?.navigate(index);
     spreadScrollRef.current?.scrollTo({
       left: index % 2 ? spreadScrollRef.current.scrollWidth : 0,
@@ -232,23 +254,33 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
     else reader.current?.previous();
   }
   function toggleEdit() {
+    setContentsOpen(false);
     setOpened(true);
     setEditing(!editing);
     setSelectedId(null);
     setActivePageId(book.pages[spreadStart].id);
     if (editing) void save();
   }
+  function returnToBeginning() {
+    setContentsOpen(false);
+    setSelectedId(null);
+    if (editing) {
+      void save();
+      setEditing(false);
+      setOpened(true);
+      setSpread(0);
+    } else if (opened && spreadStart > 0) reader.current?.navigate(0);
+    else reader.current?.close();
+  }
 
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell ${opened ? "book-open" : "book-closed"} ${editing ? "mode-editing" : "mode-reading"}`}
+    >
       <header className="app-header">
         <button
           className="brand"
-          onClick={() => {
-            setOpened(false);
-            setEditing(false);
-            void save();
-          }}
+          onClick={returnToBeginning}
           aria-label="Our Chronicle home"
         >
           <span className="brand-mark">
@@ -260,25 +292,37 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
           </span>
         </button>
         <div className="header-actions">
+          {!editing && (
+            <button
+              className="contents-toggle"
+              aria-expanded={contentsOpen}
+              aria-controls="book-contents"
+              onClick={() => setContentsOpen(!contentsOpen)}
+            >
+              <BookOpen size={15} /> Contents
+            </button>
+          )}
           <span
-            className={`save-status status-${status}`}
+            className={`save-status status-${busy ? "saving" : status}`}
             role="status"
             aria-live="polite"
           >
-            {status === "saving" ? (
+            {busy || status === "saving" ? (
               <LoaderCircle size={14} className="spinning" />
             ) : status === "saved" ? (
               <Check size={14} />
             ) : (
               <span className="status-dot" />
             )}
-            {status === "saved"
-              ? "Saved on this device"
-              : status === "saving"
-                ? "Saving…"
-                : status === "error"
-                  ? "Save needs attention"
-                  : "Unsaved changes"}
+            {busy
+              ? "Adding photograph…"
+              : status === "saved"
+                ? "Saved on this device"
+                : status === "saving"
+                  ? "Saving…"
+                  : status === "error"
+                    ? "Save needs attention"
+                    : "Unsaved changes"}
           </span>
           {status !== "saved" && (
             <button
@@ -301,18 +345,20 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
         </div>
       </header>
       <div className="workspace">
-        <aside className="contents-sidebar">
+        <aside
+          id="book-contents"
+          className={`contents-sidebar ${contentsOpen ? "contents-open" : ""}`}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setContentsOpen(false);
+          }}
+        >
           <div className="sidebar-title">
-            <span className="section-label">YOUR MEMORY BOOK</span>
+            <span className="section-label">CONTENTS</span>
             <span className="book-count">{book.pages.length} pages</span>
           </div>
           <button
             className={`cover-nav ${!opened ? "nav-active" : ""}`}
-            onClick={() => {
-              setOpened(false);
-              setEditing(false);
-              void save();
-            }}
+            onClick={returnToBeginning}
           >
             <span className="mini-cover">
               <Leaf size={16} />
@@ -339,6 +385,9 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
                 <button
                   className={`page-nav ${active ? "nav-active" : ""}`}
                   key={page.id}
+                  title={`${page.title} · Page ${String(index + 1).padStart(2, "0")}`}
+                  aria-label={`${page.title} Page ${String(index + 1).padStart(2, "0")}`}
+                  aria-current={active ? "page" : undefined}
                   onClick={() => selectPage(index)}
                 >
                   <span className={`page-thumbnail paper-${page.paper}`}>
@@ -363,45 +412,19 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
               );
             })}
           </nav>
-          <div className="sidebar-bottom">
-            <Coffee size={23} strokeWidth={1.25} />
-            <p>
-              For the moments
-              <br />
-              you’d like to stay in.
-            </p>
-            <div className="privacy-note">
-              <LockKeyhole size={11} />
-              Private. Local. Yours.
-            </div>
-          </div>
         </aside>
         <main className="main-workspace">
-          <div className="workspace-heading">
-            <div>
-              <div className="eyebrow">
-                <span /> THE ART OF KEEPING LITTLE THINGS
+          {!opened && (
+            <div className="workspace-heading">
+              <div>
+                <div className="eyebrow">
+                  <span /> THE ART OF KEEPING LITTLE THINGS
+                </div>
+                <h1>Good days, kept close.</h1>
+                <p>A collection of ordinary moments that mean everything.</p>
               </div>
-              <h1>
-                {editing
-                  ? "A little room for your story."
-                  : "Good days, kept close."}
-              </h1>
-              <p>
-                {editing
-                  ? "Make a page feel like you. Every little detail belongs here."
-                  : "A collection of ordinary moments that mean everything."}
-              </p>
             </div>
-            <div className="edition-stamp">
-              <Leaf size={19} strokeWidth={1.2} />
-              <span>
-                MADE OF
-                <br />
-                MEMORIES
-              </span>
-            </div>
-          </div>
+          )}
           {(error || notice) && (
             <div className="notice" role="alert" aria-label="Scrapbook message">
               <span>{error || notice}</span>
@@ -420,97 +443,61 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
           <div
             className={`book-stage ${opened ? "stage-open" : "stage-cover"}`}
           >
-            <div className="desk-note" aria-hidden="true">
-              {editing
-                ? "a story only you can tell"
-                : "a few of our favorite things"}
-              <svg viewBox="0 0 55 30">
-                <path d="M2 2Q15 31 48 15M39 13L48 15L42 23" />
-              </svg>
-            </div>
-            {!opened ? (
-              <motion.button
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="book-cover"
-                aria-label="Open scrapbook"
-                onClick={() => {
-                  setSpread(0);
-                  setOpened(true);
-                }}
-              >
-                <span className="cover-spine" />
-                <span className="cover-border" />
-                <span className="cover-topline">A COLLECTION OF OUR DAYS</span>
-                <span className="cover-emblem">
-                  <Leaf size={47} strokeWidth={1} />
-                  <span className="emblem-star">✦</span>
-                </span>
-                <span className="cover-title">{book.title}</span>
-                <span className="cover-subtitle">{book.subtitle}</span>
-                <span className="cover-rule" />
-                <span className="cover-bottom">
-                  COLLECT MOMENTS, KEEP THEM CLOSE
-                </span>
-                <span className="bookmark-ribbon" />
-              </motion.button>
-            ) : (
-              <div
-                className="spread-scroll"
-                ref={spreadScrollRef}
-                tabIndex={0}
-                role="region"
-                aria-label="Book spread"
-              >
-                <div className="book-spread">
-                  {editing ? (
-                    <div className="editing-spread">
-                      {book.pages
-                        .slice(spreadStart, spreadStart + 2)
-                        .map((page, offset) => (
-                          <PageRenderer
-                            key={page.id}
-                            page={page}
-                            number={spreadStart + offset + 1}
-                            editing
-                            selectedId={selectedId}
-                            active={activePage.id === page.id}
-                            onSelect={(id) => {
-                              setActivePageId(page.id);
-                              setSelectedId(id);
-                            }}
-                            onChange={(id, changes) =>
-                              changeElement(page.id, id, changes)
-                            }
-                          />
-                        ))}
-                      {book.pages.length % 2 === 1 &&
-                        spreadStart === book.pages.length - 1 && (
-                          <div className="book-page blank-page">
-                            <Leaf size={25} />
-                            <span>Room for another memory.</span>
-                          </div>
-                        )}
-                    </div>
-                  ) : (
-                    <Reader
-                      key={needsPan ? "scrolling-reader" : "flipping-reader"}
-                      book={book}
-                      allowPageGestures={!needsPan}
-                      startPage={spreadStart}
-                      onFlip={(page) => {
-                        setSpread(page);
-                        setActivePageId(
-                          book.pages[page]?.id || book.pages[0].id,
-                        );
-                      }}
-                      controlsRef={reader}
-                    />
-                  )}
-                  <div className="book-binding" aria-hidden="true" />
-                </div>
+            <div
+              className="spread-scroll"
+              ref={spreadScrollRef}
+              tabIndex={0}
+              role="region"
+              aria-label="Book spread"
+            >
+              <div className="book-spread">
+                {editing ? (
+                  <div className="editing-spread">
+                    {book.pages
+                      .slice(spreadStart, spreadStart + 2)
+                      .map((page, offset) => (
+                        <PageRenderer
+                          key={page.id}
+                          page={page}
+                          number={spreadStart + offset + 1}
+                          editing
+                          selectedId={selectedId}
+                          active={activePage.id === page.id}
+                          onSelect={(id) => {
+                            setActivePageId(page.id);
+                            setSelectedId(id);
+                          }}
+                          onChange={(id, changes) =>
+                            changeElement(page.id, id, changes)
+                          }
+                        />
+                      ))}
+                    {book.pages.length % 2 === 1 &&
+                      spreadStart === book.pages.length - 1 && (
+                        <div className="book-page blank-page">
+                          <Leaf size={25} />
+                          <span>Room for another memory.</span>
+                        </div>
+                      )}
+                  </div>
+                ) : (
+                  <Reader
+                    key={needsPan ? "scrolling-reader" : "flipping-reader"}
+                    book={book}
+                    allowPageGestures={!needsPan}
+                    startPage={opened ? spreadStart : -1}
+                    closed={!opened}
+                    onFlip={(page) => {
+                      setOpened(page >= 0);
+                      setSpread(Math.max(0, page));
+                      setActivePageId(book.pages[page]?.id || book.pages[0].id);
+                    }}
+                    controlsRef={reader}
+                  />
+                )}
+                {opened && <div className="book-binding" aria-hidden="true" />}
               </div>
-            )}
+            </div>
             {opened && needsPan && (
               <div
                 className="spread-view-controls"
@@ -546,11 +533,28 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
                 <>
                   <button
                     className="round-button"
-                    aria-label="Previous pages"
-                    disabled={spreadStart === 0}
-                    onClick={() => navigate(-1)}
+                    aria-label={
+                      !editing && spreadStart === 0
+                        ? "Close scrapbook"
+                        : "Previous pages"
+                    }
+                    title={
+                      !editing && spreadStart === 0
+                        ? "Close book"
+                        : "Previous pages"
+                    }
+                    disabled={editing && spreadStart === 0}
+                    onClick={() =>
+                      !editing && spreadStart === 0
+                        ? reader.current?.close()
+                        : navigate(-1)
+                    }
                   >
-                    <ChevronLeft size={19} />
+                    {!editing && spreadStart === 0 ? (
+                      <BookX size={17} />
+                    ) : (
+                      <ChevronLeft size={19} />
+                    )}
                   </button>
                   <span className="page-indicator" data-testid="page-indicator">
                     {spreadStart + 1} –{" "}
@@ -569,12 +573,29 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
               ) : (
                 <button
                   className="open-book-link"
-                  onClick={() => setOpened(true)}
+                  onClick={() => reader.current?.open()}
                 >
                   Open your memory book <ArrowRight size={16} />
                 </button>
               )}
             </div>
+            {opened && editing && (
+              <button
+                className="editor-jump-link"
+                onClick={() =>
+                  document
+                    .getElementById(
+                      selectedElement
+                        ? "selected-element-controls"
+                        : "scrapbook-editor",
+                    )
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
+                <Pencil size={13} />
+                {selectedElement ? "Edit selected item" : "Go to page tools"}
+              </button>
+            )}
             <p className="interaction-hint">
               {busy ? (
                 <>
@@ -592,23 +613,19 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
                     <BookOpen size={13} />
                     {needsPan
                       ? "Use the arrows below to turn the pages"
-                      : "Drag a corner or click a page to turn it"}
+                      : spreadStart === 0
+                        ? "Drag a right corner to turn · drag a left corner to close"
+                        : "Drag a corner or click a page to turn it"}
                   </>
                 )
               ) : (
                 <>
-                  <Heart size={12} />
-                  Every ordinary day has a story worth keeping
+                  <Leaf size={12} />
+                  Click the cover or drag its right corner to open
                 </>
               )}
             </p>
           </div>
-          <footer className="workspace-footer">
-            <span>YOUR STORY, ONE PAGE AT A TIME</span>
-            <span>
-              Made for slow moments <Heart size={10} />
-            </span>
-          </footer>
         </main>
         {editing && (
           <Inspector
@@ -616,6 +633,12 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
             page={activePage}
             element={selectedElement}
             busy={busy}
+            onReturnToBook={() =>
+              spreadScrollRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              })
+            }
             onBookChange={(changes) =>
               update((previous) => ({ ...previous, ...changes }))
             }

@@ -6,6 +6,7 @@ import {
   Upload,
   Plus,
   SlidersHorizontal,
+  ArrowUp,
 } from "lucide-react";
 import type { Book, BookPage, BookElement } from "@/types/book";
 
@@ -22,6 +23,7 @@ type Props = {
   onDeleteElement: () => void;
   onAddPage: () => void;
   onDeletePage: () => void;
+  onReturnToBook: () => void;
 };
 export function Inspector({
   book,
@@ -36,14 +38,23 @@ export function Inspector({
   onDeleteElement,
   onAddPage,
   onDeletePage,
+  onReturnToBook,
 }: Props) {
   return (
-    <aside className="inspector" aria-label="Scrapbook editor">
+    <aside
+      id="scrapbook-editor"
+      className="inspector"
+      aria-label="Scrapbook editor"
+      aria-busy={busy}
+    >
       <div className="inspector-heading">
         <SlidersHorizontal size={15} />
         <span>Make it yours</span>
         <span className="tiny-pill">EDITING</span>
       </div>
+      <button className="return-to-book" onClick={onReturnToBook}>
+        <ArrowUp size={13} /> Back to the page
+      </button>
       <section className="inspector-section">
         <span className="section-label">ADD A LITTLE SOMETHING</span>
         <div className="tool-grid">
@@ -78,7 +89,10 @@ export function Inspector({
         </p>
       </section>
       {element && (
-        <section className="inspector-section element-inspector">
+        <section
+          id="selected-element-controls"
+          className="inspector-section element-inspector"
+        >
           <span className="section-label">
             {element.type === "text" ? "YOUR WORDS" : "YOUR PHOTOGRAPH"}
           </span>

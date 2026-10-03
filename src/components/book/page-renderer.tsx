@@ -59,7 +59,7 @@ export const PageRenderer = forwardRef<HTMLDivElement, Props>(
     return (
       <div
         ref={ref}
-        className={`book-page paper-${page.paper} ${editing ? "editable-page" : ""} ${active ? "active-page" : ""}`}
+        className={`book-page page-${number % 2 ? "left" : "right"} paper-${page.paper} ${editing ? "editable-page" : ""} ${active ? "active-page" : ""}`}
         data-testid={`page-${number}`}
         style={{ width: PAGE_WIDTH, height: PAGE_HEIGHT }}
         onClick={() => editing && onSelect?.(null)}

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "revision": 50,
+  "revision": 63,
   "title": "Our Chronicle",
   "subtitle": "Little moments. A life well remembered.",
-  "updatedAt": "2026-10-03T10:32:32.320Z",
+  "updatedAt": "2026-10-03T11:28:02.026Z",
   "pages": [
     {
       "id": "page-1",
@@ -45,8 +45,8 @@
         },
         {
           "id": "i1",
-          "x": 60,
-          "y": 255,
+          "x": 52,
+          "y": 227,
           "width": 310,
           "height": 245,
           "rotation": -3,
@@ -75,8 +75,8 @@
       "elements": [
         {
           "id": "i2",
-          "x": 50,
-          "y": 50,
+          "x": 51,
+          "y": 36,
           "width": 330,
           "height": 260,
           "rotation": 3,
@@ -242,7 +242,7 @@
         },
         {
           "id": "8a8647be-8284-4f66-9cf4-8d77fde7d74b",
-          "x": 10,
+          "x": 8,
           "y": 182,
           "width": 430,
           "height": 296,
