@@ -568,6 +568,8 @@ h1 {
   position: relative;
   width: 880px;
   height: 580px;
+  /* Animated page/shadow transforms must not create a horizontal scrollbar. */
+  overflow: clip;
   box-shadow:
     0 16px 30px #65543a26,
     4px 5px 0 1px #d0c5ae,

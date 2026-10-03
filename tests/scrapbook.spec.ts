@@ -117,6 +117,89 @@ test("edits text, persists after refresh, adds and deletes text", async ({
   );
 });
 
+test("corner hover stays stable through repeated forward and backward drags", async ({
+  page,
+}, testInfo) => {
+  await open(page);
+  // Exercise classic, space-consuming scrollbars even in headless Chromium.
+  await page.addStyleTag({
+    content: `.spread-scroll { scrollbar-width: auto; } .spread-scroll::-webkit-scrollbar { height: 14px; }`,
+  });
+  const originalReader = await page.locator(".flipbook").elementHandle();
+  if (!originalReader) throw new Error("Reader missing");
+  for (let cycle = 0; cycle < 5; cycle++) {
+    for (const direction of ["forward", "backward"] as const) {
+      await page.mouse.move(400, 200);
+      const rect = await page.locator(".book-spread").boundingBox();
+      if (!rect) throw new Error("Book spread missing");
+      const forward = direction === "forward";
+      const bottom = cycle % 2 === 0;
+      const x = rect.x + (forward ? rect.width - 8 : 8);
+      const y = rect.y + (bottom ? rect.height - 8 : 8);
+      await page.mouse.move(x, y, { steps: 10 });
+      const hover = await page.evaluate(async () => {
+        const viewport = document.querySelector<HTMLElement>(".spread-scroll")!;
+        const reader = document.querySelector(".flipbook");
+        const start = {
+          width: viewport.clientWidth,
+          height: viewport.clientHeight,
+        };
+        let readerReplacements = 0;
+        let overflowFrames = 0;
+        let resizedFrames = 0;
+        // Sample the actual corner animation, including intermediate scrollbar/layout changes.
+        await new Promise<void>((resolve) => {
+          let frames = 0;
+          const sample = () => {
+            if (reader !== document.querySelector(".flipbook"))
+              readerReplacements++;
+            if (viewport.scrollWidth > viewport.clientWidth + 1)
+              overflowFrames++;
+            if (
+              viewport.clientWidth !== start.width ||
+              viewport.clientHeight !== start.height
+            )
+              resizedFrames++;
+            if (++frames === 24) resolve();
+            else requestAnimationFrame(sample);
+          };
+          requestAnimationFrame(sample);
+        });
+        return { readerReplacements, overflowFrames, resizedFrames };
+      });
+      expect(hover).toEqual({
+        readerReplacements: 0,
+        overflowFrames: 0,
+        resizedFrames: 0,
+      });
+      expect(
+        await originalReader.evaluate((node) => node.isConnected),
+      ).toBeTruthy();
+      await expect(
+        page.getByRole("button", { name: "Show right page", exact: true }),
+      ).toHaveCount(0);
+      if (cycle === 0)
+        await page.screenshot({
+          path: testInfo.outputPath(`${direction}-corner.png`),
+        });
+      // Release on the opposite side of the spine, committing the turn.
+      await page.mouse.down();
+      await page.mouse.move(
+        rect.x + (forward ? 230 : rect.width - 230),
+        rect.y + (bottom ? rect.height - 140 : 140),
+        { steps: 35 },
+      );
+      await page.mouse.up();
+      await expect(page.getByTestId("page-indicator")).toContainText(
+        forward ? "3 – 4" : "1 – 2",
+      );
+      expect(
+        await originalReader.evaluate((node) => node.isConnected),
+      ).toBeTruthy();
+    }
+  }
+});
+
 test("uploads, drags, resizes, replaces, refreshes, and deletes an image", async ({
   page,
   request,

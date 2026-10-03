@@ -43,7 +43,15 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
     const node = spreadScrollRef.current;
     if (!node) return;
     const observer = new ResizeObserver(() => {
-      setNeedsPan(node.scrollWidth > node.clientWidth + 1);
+      const spread = node.querySelector<HTMLElement>(".book-spread");
+      if (!spread) return;
+      const style = getComputedStyle(node);
+      const availableWidth =
+        node.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight);
+      // Page curls and shadows inflate scrollWidth; only real layout width should change reader mode.
+      setNeedsPan(spread.offsetWidth > availableWidth + 1);
     });
     observer.observe(node);
     return () => observer.disconnect();

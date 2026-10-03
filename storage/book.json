@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "revision": 0,
+  "revision": 50,
   "title": "Our Chronicle",
   "subtitle": "Little moments. A life well remembered.",
-  "updatedAt": "2026-10-03T08:29:25.505Z",
+  "updatedAt": "2026-10-03T10:32:32.320Z",
   "pages": [
     {
       "id": "page-1",
@@ -23,8 +23,8 @@
         },
         {
           "id": "t2",
-          "x": 38,
-          "y": 82,
+          "x": 48,
+          "y": 81,
           "width": 364,
           "height": 58,
           "rotation": 0,
@@ -209,6 +209,48 @@
           "type": "text",
           "text": "More memories to come…",
           "style": "handwritten"
+        },
+        {
+          "id": "968d202c-7a00-4765-a79d-84158d9dbe78",
+          "x": 302,
+          "y": 401,
+          "width": 126,
+          "height": 171,
+          "rotation": -2,
+          "type": "image",
+          "filename": "9540e394-37f1-431c-bef6-3d90974ddb6f.webp",
+          "caption": "A moment worth keeping",
+          "frame": "polaroid"
+        }
+      ]
+    },
+    {
+      "id": "a103b7ae-08be-413e-a4be-b6f27d18529a",
+      "title": "A new memory",
+      "paper": "cream",
+      "elements": [
+        {
+          "id": "7a612dba-8109-4f49-8cce-92277ab449b0",
+          "x": 41,
+          "y": 70,
+          "width": 360,
+          "height": 70,
+          "rotation": 0,
+          "type": "text",
+          "text": "Not only by the wind also by the hear",
+          "style": "heading"
+        },
+        {
+          "id": "8a8647be-8284-4f66-9cf4-8d77fde7d74b",
+          "x": 10,
+          "y": 182,
+          "width": 430,
+          "height": 296,
+          "rotation": -2,
+          "type": "image",
+          "filename": "5cfc199f-25d2-48d9-b40f-ef0aa53d303b.webp",
+          "caption": "A moment worth keeping",
+          "frame": "polaroid"
         }
       ]
     }
