@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "revision": 63,
+  "revision": 135,
   "title": "Our Chronicle",
   "subtitle": "Little moments. A life well remembered.",
-  "updatedAt": "2026-10-03T11:28:02.026Z",
+  "updatedAt": "2026-10-03T12:58:02.501Z",
   "pages": [
     {
       "id": "page-1",
@@ -65,6 +65,89 @@
           "type": "text",
           "text": "Here’s to taking the scenic route.",
           "style": "handwritten"
+        }
+      ]
+    },
+    {
+      "id": "page-4",
+      "title": "Things to remember",
+      "paper": "cream",
+      "elements": [
+        {
+          "id": "t11",
+          "x": 42,
+          "y": 106,
+          "width": 355,
+          "height": 66,
+          "rotation": 0,
+          "type": "text",
+          "text": "Things to remember",
+          "style": "heading"
+        },
+        {
+          "id": "t10",
+          "x": 42,
+          "y": 48,
+          "width": 355,
+          "height": 30,
+          "rotation": 0,
+          "type": "text",
+          "text": "A NOTE TO OUR FUTURE SELVES",
+          "style": "label"
+        },
+        {
+          "id": "t12",
+          "x": 42,
+          "y": 203,
+          "width": 355,
+          "height": 265,
+          "rotation": 0,
+          "type": "text",
+          "text": "The best stories are the ones we make together.\n\nSay yes to the impromptu road trip. Take the blurry photograph. Keep the ticket stub. Write down the funny thing before you forget it.\n\nThere is so much beauty in an ordinary day.",
+          "style": "body"
+        },
+        {
+          "id": "t13",
+          "x": 42,
+          "y": 489,
+          "width": 355,
+          "height": 55,
+          "rotation": 0,
+          "type": "text",
+          "text": "More memories to come…",
+          "style": "handwritten"
+        },
+        {
+          "id": "e3874e3b-af2d-46b9-853e-3a1d7abc6cc9",
+          "x": 308,
+          "y": 329,
+          "width": 132,
+          "height": 124,
+          "rotation": -2,
+          "locked": true,
+          "type": "image",
+          "filename": "56c5e565-0a67-4281-95fa-f839382d5d56.webp",
+          "caption": "A moment worth keeping",
+          "frame": "polaroid"
+        },
+        {
+          "id": "968d202c-7a00-4765-a79d-84158d9dbe78",
+          "x": 302,
+          "y": 409,
+          "width": 126,
+          "height": 171,
+          "rotation": -31,
+          "locked": true,
+          "type": "image",
+          "filename": "9540e394-37f1-431c-bef6-3d90974ddb6f.webp",
+          "caption": "A moment worth keeping",
+          "frame": "polaroid",
+          "crop": {
+            "x": 29.070046858104043,
+            "y": 16.15837223062257,
+            "width": 48.78048780487805,
+            "height": 42.038656235618966
+          }
         }
       ]
     },
@@ -162,69 +245,6 @@
       ]
     },
     {
-      "id": "page-4",
-      "title": "Things to remember",
-      "paper": "cream",
-      "elements": [
-        {
-          "id": "t10",
-          "x": 42,
-          "y": 48,
-          "width": 355,
-          "height": 30,
-          "rotation": 0,
-          "type": "text",
-          "text": "A NOTE TO OUR FUTURE SELVES",
-          "style": "label"
-        },
-        {
-          "id": "t11",
-          "x": 42,
-          "y": 106,
-          "width": 355,
-          "height": 66,
-          "rotation": 0,
-          "type": "text",
-          "text": "Things to remember",
-          "style": "heading"
-        },
-        {
-          "id": "t12",
-          "x": 42,
-          "y": 203,
-          "width": 355,
-          "height": 265,
-          "rotation": 0,
-          "type": "text",
-          "text": "The best stories are the ones we make together.\n\nSay yes to the impromptu road trip. Take the blurry photograph. Keep the ticket stub. Write down the funny thing before you forget it.\n\nThere is so much beauty in an ordinary day.",
-          "style": "body"
-        },
-        {
-          "id": "t13",
-          "x": 42,
-          "y": 489,
-          "width": 355,
-          "height": 55,
-          "rotation": 0,
-          "type": "text",
-          "text": "More memories to come…",
-          "style": "handwritten"
-        },
-        {
-          "id": "968d202c-7a00-4765-a79d-84158d9dbe78",
-          "x": 302,
-          "y": 401,
-          "width": 126,
-          "height": 171,
-          "rotation": -2,
-          "type": "image",
-          "filename": "9540e394-37f1-431c-bef6-3d90974ddb6f.webp",
-          "caption": "A moment worth keeping",
-          "frame": "polaroid"
-        }
-      ]
-    },
-    {
       "id": "a103b7ae-08be-413e-a4be-b6f27d18529a",
       "title": "A new memory",
       "paper": "cream",
@@ -241,16 +261,92 @@
           "style": "heading"
         },
         {
+          "id": "767290c4-0ca8-4bbc-b881-2e72abbd366c",
+          "x": 72,
+          "y": 497,
+          "width": 322,
+          "height": 82.99998474121094,
+          "rotation": -21,
+          "locked": false,
+          "type": "text",
+          "text": "Love one person forever",
+          "style": "body",
+          "fontFamily": "handwritten",
+          "fontSize": 16,
+          "color": "#514431",
+          "bold": true,
+          "italic": true,
+          "align": "center"
+        },
+        {
           "id": "8a8647be-8284-4f66-9cf4-8d77fde7d74b",
           "x": 8,
           "y": 182,
           "width": 430,
           "height": 296,
-          "rotation": -2,
+          "rotation": -16,
           "type": "image",
           "filename": "5cfc199f-25d2-48d9-b40f-ef0aa53d303b.webp",
           "caption": "A moment worth keeping",
           "frame": "polaroid"
+        },
+        {
+          "id": "80e350b3-1997-4bbb-b861-3e4144b543e6",
+          "x": 118,
+          "y": 497,
+          "width": 322,
+          "height": 82.99998474121094,
+          "rotation": -21,
+          "locked": false,
+          "type": "text",
+          "text": "Love one person forever",
+          "style": "body",
+          "fontFamily": "handwritten",
+          "fontSize": 16,
+          "color": "#514431",
+          "bold": true,
+          "italic": true,
+          "align": "center"
+        }
+      ]
+    },
+    {
+      "id": "0d9b0b9f-c5cc-48ab-9643-d8acdb2c0904",
+      "title": "One moment, kept close",
+      "paper": "cream",
+      "elements": [
+        {
+          "id": "94218f67-6e5e-4495-9a81-522d5c1c20e7",
+          "x": 40,
+          "y": 55,
+          "width": 360,
+          "height": 70,
+          "rotation": 0,
+          "type": "text",
+          "text": "One moment, kept close",
+          "style": "heading"
+        },
+        {
+          "id": "eb962fb0-0f09-494b-be34-1ff70d8b583e",
+          "x": 55,
+          "y": 145,
+          "width": 330,
+          "height": 320,
+          "rotation": -2,
+          "type": "image",
+          "caption": "A photograph worth keeping",
+          "frame": "polaroid"
+        },
+        {
+          "id": "585ad889-23c2-46bf-82d3-40b654da0188",
+          "x": 50,
+          "y": 490,
+          "width": 340,
+          "height": 55,
+          "rotation": 0,
+          "type": "text",
+          "text": "The story behind this photograph…",
+          "style": "handwritten"
         }
       ]
     }

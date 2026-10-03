@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
   ArrowRight,
@@ -14,17 +14,30 @@ import {
   Pencil,
   Save,
   Sparkles,
+  Undo2,
+  Redo2,
   X,
 } from "lucide-react";
 import { useBook } from "@/hooks/use-book";
-import { type Book, type BookElement, type BookPage } from "@/types/book";
+import {
+  type Book,
+  type BookElement,
+  type BookPage,
+  type PageTemplate,
+} from "@/types/book";
+import {
+  createPageFromTemplate,
+  duplicateBookPage,
+  duplicateElement,
+} from "@/lib/editor";
 import { Reader, type ReaderHandle } from "./book/reader";
-import { PageRenderer } from "./book/page-renderer";
+import { PageRenderer, ImageRevisionContext } from "./book/page-renderer";
 import { Inspector } from "./editor/inspector";
 import { DeletePageDialog } from "./editor/delete-page-dialog";
 
 export function Scrapbook({ initialBook }: { initialBook: Book }) {
-  const { book, update, save, status, error } = useBook(initialBook);
+  const { book, update, save, status, error, undo, redo, canUndo, canRedo } =
+    useBook(initialBook);
   const [opened, setOpened] = useState(false);
   const [editing, setEditing] = useState(false);
   const [spread, setSpread] = useState(0);
@@ -42,13 +55,22 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
     const closed = !opened && wasOpened.current;
     wasOpened.current = opened;
     if (closed) {
-      // The wrapper reconciles/reinserts its page nodes in effects; hand off focus after that work.
-      const frame = requestAnimationFrame(() =>
-        spreadScrollRef.current
-          ?.querySelector<HTMLElement>(".native-cover")
-          ?.focus({ preventScroll: true }),
-      );
-      return () => cancelAnimationFrame(frame);
+      const focusCover = () => {
+        const cover =
+          spreadScrollRef.current?.querySelector<HTMLElement>(".native-cover");
+        if (cover?.getAttribute("aria-hidden") === "false")
+          cover.focus({ preventScroll: true });
+      };
+      const pages = spreadScrollRef.current?.querySelector(".stf__block");
+      // The wrapper removes/reinserts page nodes in a later React effect, dropping
+      // focus even when the cover node is unchanged. Restore it after that batch.
+      const observer = new MutationObserver(() => {
+        focusCover();
+        observer.disconnect();
+      });
+      if (pages) observer.observe(pages, { childList: true });
+      focusCover();
+      return () => observer.disconnect();
     }
   }, [opened]);
   useEffect(() => {
@@ -86,6 +108,64 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
     Math.floor(spread / 2) * 2,
     Math.floor((book.pages.length - 1) / 2) * 2,
   );
+  const applyHistory = useCallback(
+    (direction: "undo" | "redo") => {
+      if (busy) return;
+      const restored = direction === "undo" ? undo() : redo();
+      if (!restored) return;
+      const restoredPage = restored.pages.find(
+        (page) => !book.pages.some((current) => current.id === page.id),
+      );
+      let index = restored.pages.findIndex(
+        (page) => page.id === (restoredPage?.id ?? activePageId),
+      );
+      if (index < 0)
+        index = Math.min(
+          book.pages.findIndex((page) => page.id === activePageId),
+          restored.pages.length - 1,
+        );
+      index = Math.max(0, index);
+      const page = restored.pages[index];
+      setActivePageId(page.id);
+      setSpread(Math.floor(index / 2) * 2);
+      const restoredElement =
+        !restoredPage &&
+        page.elements.find(
+          (element) =>
+            !book.pages.some((current) =>
+              current.elements.some((item) => item.id === element.id),
+            ),
+        );
+      setSelectedId(
+        page.elements.some((element) => element.id === selectedId)
+          ? selectedId
+          : restoredElement
+            ? restoredElement.id
+            : null,
+      );
+    },
+    [activePageId, book.pages, busy, redo, selectedId, undo],
+  );
+  useEffect(() => {
+    if (!editing) return;
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        target?.closest(
+          "input, textarea, select, [contenteditable='true'], dialog[open]",
+        )
+      )
+        return;
+      const key = event.key.toLowerCase();
+      if (key === "z" || key === "y") {
+        event.preventDefault();
+        applyHistory(key === "y" || event.shiftKey ? "redo" : "undo");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [applyHistory, editing]);
 
   function selectPage(index: number) {
     setContentsOpen(false);
@@ -100,33 +180,46 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
     });
   }
   function changePage(id: string, changes: Partial<BookPage>) {
-    update((previous) => ({
-      ...previous,
-      pages: previous.pages.map((page) =>
-        page.id === id ? { ...page, ...changes } : page,
-      ),
-    }));
+    update(
+      (previous) => ({
+        ...previous,
+        pages: previous.pages.map((page) =>
+          page.id === id ? { ...page, ...changes } : page,
+        ),
+      }),
+      Object.keys(changes).length === 1 && "title" in changes
+        ? `page:${id}:title`
+        : undefined,
+    );
   }
   function changeElement(
     pageId: string,
     id: string,
     changes: Partial<BookElement>,
   ) {
-    update((previous) => ({
-      ...previous,
-      pages: previous.pages.map((page) =>
-        page.id === pageId
-          ? {
-              ...page,
-              elements: page.elements.map((element) =>
-                element.id === id
-                  ? ({ ...element, ...changes } as BookElement)
-                  : element,
-              ),
-            }
-          : page,
-      ),
-    }));
+    update(
+      (previous) => ({
+        ...previous,
+        pages: previous.pages.map((page) =>
+          page.id === pageId
+            ? {
+                ...page,
+                elements: page.elements.map((element) =>
+                  element.id === id
+                    ? ({ ...element, ...changes } as BookElement)
+                    : element,
+                ),
+              }
+            : page,
+        ),
+      }),
+      Object.keys(changes).length === 1 &&
+        ["text", "caption", "fontSize", "rotation", "color"].includes(
+          Object.keys(changes)[0],
+        )
+        ? `element:${id}:${Object.keys(changes)[0]}`
+        : undefined,
+    );
   }
   function addText() {
     const element: BookElement = {
@@ -166,6 +259,7 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
       if (replace && selectedElement?.type === "image")
         changeElement(activePage.id, selectedElement.id, {
           filename: result.filename,
+          crop: null,
         });
       else {
         const width = 280;
@@ -204,29 +298,57 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
       setBusy(false);
     }
   }
-  function addPage() {
-    const page: BookPage = {
-      id: crypto.randomUUID(),
-      title: "A new memory",
-      paper: "cream",
-      elements: [
-        {
-          id: crypto.randomUUID(),
-          type: "text",
-          text: "A new memory",
-          x: 40,
-          y: 70,
-          width: 360,
-          height: 70,
-          style: "heading",
-          rotation: 0,
-        },
-      ],
-    };
+  function addPage(template: PageTemplate = "blank") {
+    if (book.pages.length >= 100) return;
+    const page = createPageFromTemplate(template);
     update((previous) => ({ ...previous, pages: [...previous.pages, page] }));
     setActivePageId(page.id);
     setSelectedId(null);
     setSpread(Math.floor(book.pages.length / 2) * 2);
+  }
+  function copyElement() {
+    if (!selectedElement || activePage.elements.length >= 60) return;
+    const copy = duplicateElement(selectedElement);
+    changePage(activePage.id, { elements: [...activePage.elements, copy] });
+    setSelectedId(copy.id);
+  }
+  function layerElement(direction: "forward" | "backward") {
+    if (!selectedElement) return;
+    const index = activePage.elements.findIndex(
+      (element) => element.id === selectedId,
+    );
+    const next = index + (direction === "forward" ? 1 : -1);
+    if (next < 0 || next >= activePage.elements.length) return;
+    const elements = [...activePage.elements];
+    [elements[index], elements[next]] = [elements[next], elements[index]];
+    changePage(activePage.id, { elements });
+  }
+  function copyPage() {
+    if (book.pages.length >= 100) return;
+    const index = book.pages.findIndex((page) => page.id === activePage.id);
+    const copy = duplicateBookPage(activePage);
+    update((previous) => ({
+      ...previous,
+      pages: [
+        ...previous.pages.slice(0, index + 1),
+        copy,
+        ...previous.pages.slice(index + 1),
+      ],
+    }));
+    setActivePageId(copy.id);
+    setSelectedId(null);
+    setSpread(Math.floor((index + 1) / 2) * 2);
+  }
+  function movePage(direction: -1 | 1) {
+    const index = book.pages.findIndex((page) => page.id === activePage.id);
+    const next = index + direction;
+    if (next < 0 || next >= book.pages.length) return;
+    update((previous) => {
+      const pages = [...previous.pages];
+      [pages[index], pages[next]] = [pages[next], pages[index]];
+      return { ...previous, pages };
+    });
+    setSpread(Math.floor(next / 2) * 2);
   }
   function removePage() {
     const index = book.pages.findIndex((page) => page.id === activePage.id);
@@ -274,400 +396,443 @@ export function Scrapbook({ initialBook }: { initialBook: Book }) {
   }
 
   return (
-    <div
-      className={`app-shell ${opened ? "book-open" : "book-closed"} ${editing ? "mode-editing" : "mode-reading"}`}
-    >
-      <header className="app-header">
-        <button
-          className="brand"
-          onClick={returnToBeginning}
-          aria-label="Our Chronicle home"
-        >
-          <span className="brand-mark">
-            <BookOpen size={22} strokeWidth={1.5} />
-          </span>
-          <span>
-            our chronicle
-            <span className="brand-caption">A HOME FOR YOUR MEMORIES</span>
-          </span>
-        </button>
-        <div className="header-actions">
-          {!editing && (
-            <button
-              className="contents-toggle"
-              aria-expanded={contentsOpen}
-              aria-controls="book-contents"
-              onClick={() => setContentsOpen(!contentsOpen)}
-            >
-              <BookOpen size={15} /> Contents
-            </button>
-          )}
-          <span
-            className={`save-status status-${busy ? "saving" : status}`}
-            role="status"
-            aria-live="polite"
-          >
-            {busy || status === "saving" ? (
-              <LoaderCircle size={14} className="spinning" />
-            ) : status === "saved" ? (
-              <Check size={14} />
-            ) : (
-              <span className="status-dot" />
-            )}
-            {busy
-              ? "Adding photograph…"
-              : status === "saved"
-                ? "Saved on this device"
-                : status === "saving"
-                  ? "Saving…"
-                  : status === "error"
-                    ? "Save needs attention"
-                    : "Unsaved changes"}
-          </span>
-          {status !== "saved" && (
-            <button
-              className="icon-button"
-              aria-label="Save now"
-              title="Save now"
-              onClick={() => void save()}
-            >
-              <Save size={17} />
-            </button>
-          )}
+    <ImageRevisionContext.Provider value={book.revision}>
+      <div
+        className={`app-shell ${opened ? "book-open" : "book-closed"} ${editing ? "mode-editing" : "mode-reading"}`}
+      >
+        <header className="app-header">
           <button
-            className={`primary-button ${editing ? "editing-toggle" : ""}`}
-            aria-pressed={editing}
-            onClick={toggleEdit}
-          >
-            {editing ? <Check size={15} /> : <Pencil size={15} />}
-            {editing ? "Done editing" : "Edit scrapbook"}
-          </button>
-        </div>
-      </header>
-      <div className="workspace">
-        <aside
-          id="book-contents"
-          className={`contents-sidebar ${contentsOpen ? "contents-open" : ""}`}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setContentsOpen(false);
-          }}
-        >
-          <div className="sidebar-title">
-            <span className="section-label">CONTENTS</span>
-            <span className="book-count">{book.pages.length} pages</span>
-          </div>
-          <button
-            className={`cover-nav ${!opened ? "nav-active" : ""}`}
+            className="brand"
             onClick={returnToBeginning}
+            aria-label="Our Chronicle home"
           >
-            <span className="mini-cover">
-              <Leaf size={16} />
+            <span className="brand-mark">
+              <BookOpen size={22} strokeWidth={1.5} />
             </span>
             <span>
-              The cover<small>Where our story begins</small>
+              our chronicle
+              <span className="brand-caption">A HOME FOR YOUR MEMORIES</span>
             </span>
-            <ChevronRight size={14} />
           </button>
-          <div className="sidebar-divider">
-            <span>THE CHAPTERS</span>
-          </div>
-          <nav className="pages-nav" aria-label="Book pages">
-            {book.pages.map((page, index) => {
-              const photo = page.elements.find(
-                (element) => element.type === "image",
-              );
-              const active =
-                opened &&
-                (editing
-                  ? activePage.id === page.id
-                  : index >= spreadStart && index <= spreadStart + 1);
-              return (
+          <div className="header-actions">
+            {editing && (
+              <div className="history-controls" aria-label="Edit history">
                 <button
-                  className={`page-nav ${active ? "nav-active" : ""}`}
-                  key={page.id}
-                  title={`${page.title} · Page ${String(index + 1).padStart(2, "0")}`}
-                  aria-label={`${page.title} Page ${String(index + 1).padStart(2, "0")}`}
-                  aria-current={active ? "page" : undefined}
-                  onClick={() => selectPage(index)}
+                  className="history-button"
+                  aria-label="Undo"
+                  title="Undo (Ctrl/Cmd+Z)"
+                  disabled={busy || !canUndo}
+                  onClick={() => applyHistory("undo")}
                 >
-                  <span className={`page-thumbnail paper-${page.paper}`}>
-                    {photo?.type === "image" ? (
-                      <Image
-                        src={`/api/images/${photo.filename}`}
-                        alt=""
-                        fill
-                        unoptimized
-                        sizes="40px"
-                      />
-                    ) : (
-                      <Feather size={15} />
-                    )}
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                  </span>
-                  <span>
-                    {page.title}
-                    <small>Page {String(index + 1).padStart(2, "0")}</small>
-                  </span>
+                  <Undo2 size={16} />
                 </button>
-              );
-            })}
-          </nav>
-        </aside>
-        <main className="main-workspace">
-          {!opened && (
-            <div className="workspace-heading">
-              <div>
-                <div className="eyebrow">
-                  <span /> THE ART OF KEEPING LITTLE THINGS
-                </div>
-                <h1>Good days, kept close.</h1>
-                <p>A collection of ordinary moments that mean everything.</p>
-              </div>
-            </div>
-          )}
-          {(error || notice) && (
-            <div className="notice" role="alert" aria-label="Scrapbook message">
-              <span>{error || notice}</span>
-              {error ? (
-                <button onClick={() => void save()}>Retry save</button>
-              ) : (
                 <button
-                  aria-label="Dismiss message"
-                  onClick={() => setNotice("")}
+                  className="history-button"
+                  aria-label="Redo"
+                  title="Redo (Ctrl/Cmd+Shift+Z)"
+                  disabled={busy || !canRedo}
+                  onClick={() => applyHistory("redo")}
                 >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          )}
-          <div
-            className={`book-stage ${opened ? "stage-open" : "stage-cover"}`}
-          >
-            <div
-              className="spread-scroll"
-              ref={spreadScrollRef}
-              tabIndex={0}
-              role="region"
-              aria-label="Book spread"
-            >
-              <div className="book-spread">
-                {editing ? (
-                  <div className="editing-spread">
-                    {book.pages
-                      .slice(spreadStart, spreadStart + 2)
-                      .map((page, offset) => (
-                        <PageRenderer
-                          key={page.id}
-                          page={page}
-                          number={spreadStart + offset + 1}
-                          editing
-                          selectedId={selectedId}
-                          active={activePage.id === page.id}
-                          onSelect={(id) => {
-                            setActivePageId(page.id);
-                            setSelectedId(id);
-                          }}
-                          onChange={(id, changes) =>
-                            changeElement(page.id, id, changes)
-                          }
-                        />
-                      ))}
-                    {book.pages.length % 2 === 1 &&
-                      spreadStart === book.pages.length - 1 && (
-                        <div className="book-page blank-page">
-                          <Leaf size={25} />
-                          <span>Room for another memory.</span>
-                        </div>
-                      )}
-                  </div>
-                ) : (
-                  <Reader
-                    key={needsPan ? "scrolling-reader" : "flipping-reader"}
-                    book={book}
-                    allowPageGestures={!needsPan}
-                    startPage={opened ? spreadStart : -1}
-                    closed={!opened}
-                    onFlip={(page) => {
-                      setOpened(page >= 0);
-                      setSpread(Math.max(0, page));
-                      setActivePageId(book.pages[page]?.id || book.pages[0].id);
-                    }}
-                    controlsRef={reader}
-                  />
-                )}
-                {opened && <div className="book-binding" aria-hidden="true" />}
-              </div>
-            </div>
-            {opened && needsPan && (
-              <div
-                className="spread-view-controls"
-                aria-label="View both sides of the spread"
-              >
-                <button
-                  onClick={() =>
-                    spreadScrollRef.current?.scrollTo({
-                      left: 0,
-                      behavior: "smooth",
-                    })
-                  }
-                >
-                  <ChevronLeft size={13} />
-                  Show left page
-                </button>
-                <span>Scroll sideways to see more</span>
-                <button
-                  onClick={() =>
-                    spreadScrollRef.current?.scrollTo({
-                      left: spreadScrollRef.current.scrollWidth,
-                      behavior: "smooth",
-                    })
-                  }
-                >
-                  Show right page
-                  <ChevronRight size={13} />
+                  <Redo2 size={16} />
                 </button>
               </div>
             )}
-            <div className="book-controls">
-              {opened ? (
-                <>
-                  <button
-                    className="round-button"
-                    aria-label={
-                      !editing && spreadStart === 0
-                        ? "Close scrapbook"
-                        : "Previous pages"
-                    }
-                    title={
-                      !editing && spreadStart === 0
-                        ? "Close book"
-                        : "Previous pages"
-                    }
-                    disabled={editing && spreadStart === 0}
-                    onClick={() =>
-                      !editing && spreadStart === 0
-                        ? reader.current?.close()
-                        : navigate(-1)
-                    }
-                  >
-                    {!editing && spreadStart === 0 ? (
-                      <BookX size={17} />
-                    ) : (
-                      <ChevronLeft size={19} />
-                    )}
-                  </button>
-                  <span className="page-indicator" data-testid="page-indicator">
-                    {spreadStart + 1} –{" "}
-                    {Math.min(spreadStart + 2, book.pages.length)}{" "}
-                    <span>of {book.pages.length}</span>
-                  </span>
-                  <button
-                    className="round-button"
-                    aria-label="Next pages"
-                    disabled={spreadStart + 2 >= book.pages.length}
-                    onClick={() => navigate(1)}
-                  >
-                    <ChevronRight size={19} />
-                  </button>
-                </>
-              ) : (
-                <button
-                  className="open-book-link"
-                  onClick={() => reader.current?.open()}
-                >
-                  Open your memory book <ArrowRight size={16} />
-                </button>
-              )}
-            </div>
-            {opened && editing && (
+            {!editing && (
               <button
-                className="editor-jump-link"
-                onClick={() =>
-                  document
-                    .getElementById(
-                      selectedElement
-                        ? "selected-element-controls"
-                        : "scrapbook-editor",
-                    )
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                }
+                className="contents-toggle"
+                aria-expanded={contentsOpen}
+                aria-controls="book-contents"
+                onClick={() => setContentsOpen(!contentsOpen)}
               >
-                <Pencil size={13} />
-                {selectedElement ? "Edit selected item" : "Go to page tools"}
+                <BookOpen size={15} /> Contents
               </button>
             )}
-            <p className="interaction-hint">
-              {busy ? (
-                <>
-                  <LoaderCircle size={13} className="spinning" />
-                  Adding your photograph…
-                </>
-              ) : opened ? (
-                editing ? (
+            <span
+              className={`save-status status-${busy ? "saving" : status}`}
+              role="status"
+              aria-live="polite"
+            >
+              {busy || status === "saving" ? (
+                <LoaderCircle size={14} className="spinning" />
+              ) : status === "saved" ? (
+                <Check size={14} />
+              ) : (
+                <span className="status-dot" />
+              )}
+              {busy
+                ? "Adding photograph…"
+                : status === "saved"
+                  ? "Saved on this device"
+                  : status === "saving"
+                    ? "Saving…"
+                    : status === "error"
+                      ? "Save needs attention"
+                      : "Unsaved changes"}
+            </span>
+            {status !== "saved" && (
+              <button
+                className="icon-button"
+                aria-label="Save now"
+                title="Save now"
+                onClick={() => void save()}
+              >
+                <Save size={17} />
+              </button>
+            )}
+            <button
+              className={`primary-button ${editing ? "editing-toggle" : ""}`}
+              aria-pressed={editing}
+              onClick={toggleEdit}
+            >
+              {editing ? <Check size={15} /> : <Pencil size={15} />}
+              {editing ? "Done editing" : "Edit scrapbook"}
+            </button>
+          </div>
+        </header>
+        <div className="workspace">
+          <aside
+            id="book-contents"
+            className={`contents-sidebar ${contentsOpen ? "contents-open" : ""}`}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setContentsOpen(false);
+            }}
+          >
+            <div className="sidebar-title">
+              <span className="section-label">CONTENTS</span>
+              <span className="book-count">{book.pages.length} pages</span>
+            </div>
+            <button
+              className={`cover-nav ${!opened ? "nav-active" : ""}`}
+              onClick={returnToBeginning}
+            >
+              <span className="mini-cover">
+                <Leaf size={16} />
+              </span>
+              <span>
+                The cover<small>Where our story begins</small>
+              </span>
+              <ChevronRight size={14} />
+            </button>
+            <div className="sidebar-divider">
+              <span>THE CHAPTERS</span>
+            </div>
+            <nav className="pages-nav" aria-label="Book pages">
+              {book.pages.map((page, index) => {
+                const photo = page.elements.find(
+                  (element) => element.type === "image",
+                );
+                const active =
+                  opened &&
+                  (editing
+                    ? activePage.id === page.id
+                    : index >= spreadStart && index <= spreadStart + 1);
+                return (
+                  <button
+                    className={`page-nav ${active ? "nav-active" : ""}`}
+                    key={page.id}
+                    title={`${page.title} · Page ${String(index + 1).padStart(2, "0")}`}
+                    aria-label={`${page.title} Page ${String(index + 1).padStart(2, "0")}`}
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => selectPage(index)}
+                  >
+                    <span className={`page-thumbnail paper-${page.paper}`}>
+                      {photo?.type === "image" && photo.filename ? (
+                        <Image
+                          src={`/api/images/${photo.filename}`}
+                          alt=""
+                          fill
+                          unoptimized
+                          sizes="40px"
+                        />
+                      ) : (
+                        <Feather size={15} />
+                      )}
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                    </span>
+                    <span>
+                      {page.title}
+                      <small>Page {String(index + 1).padStart(2, "0")}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
+          <main className="main-workspace">
+            {!opened && (
+              <div className="workspace-heading">
+                <div>
+                  <div className="eyebrow">
+                    <span /> THE ART OF KEEPING LITTLE THINGS
+                  </div>
+                  <h1>Good days, kept close.</h1>
+                  <p>A collection of ordinary moments that mean everything.</p>
+                </div>
+              </div>
+            )}
+            {(error || notice) && (
+              <div
+                className="notice"
+                role="alert"
+                aria-label="Scrapbook message"
+              >
+                <span>{error || notice}</span>
+                {error ? (
+                  <button onClick={() => void save()}>Retry save</button>
+                ) : (
+                  <button
+                    aria-label="Dismiss message"
+                    onClick={() => setNotice("")}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            )}
+            <div
+              className={`book-stage ${opened ? "stage-open" : "stage-cover"}`}
+            >
+              <div
+                className="spread-scroll"
+                ref={spreadScrollRef}
+                tabIndex={0}
+                role="region"
+                aria-label="Book spread"
+              >
+                <div className="book-spread">
+                  {editing ? (
+                    <div className="editing-spread">
+                      {book.pages
+                        .slice(spreadStart, spreadStart + 2)
+                        .map((page, offset) => (
+                          <PageRenderer
+                            key={page.id}
+                            page={page}
+                            number={spreadStart + offset + 1}
+                            editing
+                            selectedId={selectedId}
+                            active={activePage.id === page.id}
+                            onSelect={(id) => {
+                              setActivePageId(page.id);
+                              setSelectedId(id);
+                            }}
+                            onChange={(id, changes) =>
+                              changeElement(page.id, id, changes)
+                            }
+                          />
+                        ))}
+                      {book.pages.length % 2 === 1 &&
+                        spreadStart === book.pages.length - 1 && (
+                          <div className="book-page blank-page">
+                            <Leaf size={25} />
+                            <span>Room for another memory.</span>
+                          </div>
+                        )}
+                    </div>
+                  ) : (
+                    <Reader
+                      key={needsPan ? "scrolling-reader" : "flipping-reader"}
+                      book={book}
+                      allowPageGestures={!needsPan}
+                      startPage={opened ? spreadStart : -1}
+                      closed={!opened}
+                      onFlip={(page) => {
+                        setOpened(page >= 0);
+                        setSpread(Math.max(0, page));
+                        setActivePageId(
+                          book.pages[page]?.id || book.pages[0].id,
+                        );
+                      }}
+                      controlsRef={reader}
+                    />
+                  )}
+                  {opened && (
+                    <div className="book-binding" aria-hidden="true" />
+                  )}
+                </div>
+              </div>
+              {opened && needsPan && (
+                <div
+                  className="spread-view-controls"
+                  aria-label="View both sides of the spread"
+                >
+                  <button
+                    onClick={() =>
+                      spreadScrollRef.current?.scrollTo({
+                        left: 0,
+                        behavior: "smooth",
+                      })
+                    }
+                  >
+                    <ChevronLeft size={13} />
+                    Show left page
+                  </button>
+                  <span>Scroll sideways to see more</span>
+                  <button
+                    onClick={() =>
+                      spreadScrollRef.current?.scrollTo({
+                        left: spreadScrollRef.current.scrollWidth,
+                        behavior: "smooth",
+                      })
+                    }
+                  >
+                    Show right page
+                    <ChevronRight size={13} />
+                  </button>
+                </div>
+              )}
+              <div className="book-controls">
+                {opened ? (
                   <>
-                    <Sparkles size={13} />
-                    Click a page or element to make it yours
+                    <button
+                      className="round-button"
+                      aria-label={
+                        !editing && spreadStart === 0
+                          ? "Close scrapbook"
+                          : "Previous pages"
+                      }
+                      title={
+                        !editing && spreadStart === 0
+                          ? "Close book"
+                          : "Previous pages"
+                      }
+                      disabled={editing && spreadStart === 0}
+                      onClick={() =>
+                        !editing && spreadStart === 0
+                          ? reader.current?.close()
+                          : navigate(-1)
+                      }
+                    >
+                      {!editing && spreadStart === 0 ? (
+                        <BookX size={17} />
+                      ) : (
+                        <ChevronLeft size={19} />
+                      )}
+                    </button>
+                    <span
+                      className="page-indicator"
+                      data-testid="page-indicator"
+                    >
+                      {spreadStart + 1} –{" "}
+                      {Math.min(spreadStart + 2, book.pages.length)}{" "}
+                      <span>of {book.pages.length}</span>
+                    </span>
+                    <button
+                      className="round-button"
+                      aria-label="Next pages"
+                      disabled={spreadStart + 2 >= book.pages.length}
+                      onClick={() => navigate(1)}
+                    >
+                      <ChevronRight size={19} />
+                    </button>
                   </>
                 ) : (
-                  <>
-                    <BookOpen size={13} />
-                    {needsPan
-                      ? "Use the arrows below to turn the pages"
-                      : spreadStart === 0
-                        ? "Drag a right corner to turn · drag a left corner to close"
-                        : "Drag a corner or click a page to turn it"}
-                  </>
-                )
-              ) : (
-                <>
-                  <Leaf size={12} />
-                  Click the cover or drag its right corner to open
-                </>
+                  <button
+                    className="open-book-link"
+                    onClick={() => reader.current?.open()}
+                  >
+                    Open your memory book <ArrowRight size={16} />
+                  </button>
+                )}
+              </div>
+              {opened && editing && (
+                <button
+                  className="editor-jump-link"
+                  onClick={() =>
+                    document
+                      .getElementById(
+                        selectedElement
+                          ? "selected-element-controls"
+                          : "scrapbook-editor",
+                      )
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                >
+                  <Pencil size={13} />
+                  {selectedElement ? "Edit selected item" : "Go to page tools"}
+                </button>
               )}
-            </p>
-          </div>
-        </main>
-        {editing && (
-          <Inspector
-            book={book}
-            page={activePage}
-            element={selectedElement}
-            busy={busy}
-            onReturnToBook={() =>
-              spreadScrollRef.current?.scrollIntoView({
-                behavior: "smooth",
-                block: "center",
-              })
-            }
-            onBookChange={(changes) =>
-              update((previous) => ({ ...previous, ...changes }))
-            }
-            onPageChange={(changes) => changePage(activePage.id, changes)}
-            onElementChange={(changes) =>
-              selectedId && changeElement(activePage.id, selectedId, changes)
-            }
-            onAddText={addText}
-            onUpload={upload}
-            onDeleteElement={() => {
-              changePage(activePage.id, {
-                elements: activePage.elements.filter(
-                  (element) => element.id !== selectedId,
-                ),
-              });
-              setSelectedId(null);
-            }}
-            onAddPage={addPage}
-            onDeletePage={() => setDeletePage(true)}
+              <p className="interaction-hint">
+                {busy ? (
+                  <>
+                    <LoaderCircle size={13} className="spinning" />
+                    Adding your photograph…
+                  </>
+                ) : opened ? (
+                  editing ? (
+                    <>
+                      <Sparkles size={13} />
+                      Click a page or element to make it yours
+                    </>
+                  ) : (
+                    <>
+                      <BookOpen size={13} />
+                      {needsPan
+                        ? "Use the arrows below to turn the pages"
+                        : spreadStart === 0
+                          ? "Drag a right corner to turn · drag a left corner to close"
+                          : "Drag a corner or click a page to turn it"}
+                    </>
+                  )
+                ) : (
+                  <>
+                    <Leaf size={12} />
+                    Click the cover or drag its right corner to open
+                  </>
+                )}
+              </p>
+            </div>
+          </main>
+          {editing && (
+            <Inspector
+              book={book}
+              page={activePage}
+              element={selectedElement}
+              busy={busy}
+              onReturnToBook={() =>
+                spreadScrollRef.current?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                })
+              }
+              onBookChange={(changes) =>
+                update(
+                  (previous) => ({ ...previous, ...changes }),
+                  `cover:${Object.keys(changes).join(",")}`,
+                )
+              }
+              onPageChange={(changes) => changePage(activePage.id, changes)}
+              onElementChange={(changes) =>
+                selectedId && changeElement(activePage.id, selectedId, changes)
+              }
+              onAddText={addText}
+              onDuplicateElement={copyElement}
+              onLayerElement={layerElement}
+              onSelectElement={(id) => setSelectedId(id)}
+              onDuplicatePage={copyPage}
+              onMovePage={movePage}
+              onUpload={upload}
+              onDeleteElement={() => {
+                changePage(activePage.id, {
+                  elements: activePage.elements.filter(
+                    (element) => element.id !== selectedId,
+                  ),
+                });
+                setSelectedId(null);
+              }}
+              onAddPage={addPage}
+              onDeletePage={() => setDeletePage(true)}
+            />
+          )}
+        </div>
+        {deletePage && (
+          <DeletePageDialog
+            title={activePage.title}
+            onCancel={() => setDeletePage(false)}
+            onConfirm={removePage}
           />
         )}
       </div>
-      {deletePage && (
-        <DeletePageDialog
-          title={activePage.title}
-          onCancel={() => setDeletePage(false)}
-          onConfirm={removePage}
-        />
-      )}
-    </div>
+    </ImageRevisionContext.Provider>
   );
 }

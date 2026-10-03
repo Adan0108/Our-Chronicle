@@ -26,8 +26,8 @@ export function DeletePageDialog({
     >
       <h2 id="delete-title">Remove this page?</h2>
       <p>
-        “{title}” and its elements will be removed from your book. This cannot
-        be undone.
+        “{title}” and its elements will be removed from your book. You can undo
+        this during your current editing session.
       </p>
       <div>
         <button autoFocus className="secondary-button" onClick={onCancel}>

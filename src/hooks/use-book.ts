@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Book } from "@/types/book";
 
+const HISTORY_LIMIT = 50;
+
 export function useBook(initialBook: Book) {
   const [book, setBook] = useState(initialBook);
   const [status, setStatus] = useState<
@@ -14,9 +16,23 @@ export function useBook(initialBook: Book) {
   const generation = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef<Promise<boolean> | null>(null);
+  const history = useRef<{
+    past: Book[];
+    future: Book[];
+    group: string | null;
+  }>({
+    past: [],
+    future: [],
+    group: null,
+  });
+  const [historyState, setHistoryState] = useState({
+    canUndo: false,
+    canRedo: false,
+  });
 
   const save = useCallback(async (): Promise<boolean> => {
     if (timer.current) clearTimeout(timer.current);
+    history.current.group = null;
     while (inFlight.current) await inFlight.current;
     if (!dirty.current) return true;
     const snapshot = { ...current.current, revision: revision.current };
@@ -57,9 +73,9 @@ export function useBook(initialBook: Book) {
     return success;
   }, []);
 
-  const update = useCallback(
-    (transform: (previous: Book) => Book) => {
-      current.current = transform(current.current);
+  const apply = useCallback(
+    (next: Book) => {
+      current.current = next;
       setBook(current.current);
       generation.current++;
       dirty.current = true;
@@ -68,9 +84,63 @@ export function useBook(initialBook: Book) {
       timer.current = setTimeout(() => {
         void save();
       }, 650);
+      setHistoryState({
+        canUndo: history.current.past.length > 0,
+        canRedo: history.current.future.length > 0,
+      });
     },
     [save],
   );
+
+  const update = useCallback(
+    (transform: (previous: Book) => Book, group?: string) => {
+      const previous = current.current;
+      const next = transform(previous);
+      // Some editor transforms create fresh arrays even when nothing changed.
+      if (
+        next === previous ||
+        JSON.stringify(next) === JSON.stringify(previous)
+      )
+        return;
+      const entry = history.current;
+      if (!group || entry.group !== group)
+        entry.past = [...entry.past, previous].slice(-HISTORY_LIMIT);
+      entry.future = [];
+      entry.group = group ?? null;
+      apply(next);
+    },
+    [apply],
+  );
+
+  const undo = useCallback(() => {
+    const entry = history.current;
+    const previous = entry.past.pop();
+    if (!previous) return null;
+    entry.future = [...entry.future, current.current].slice(-HISTORY_LIMIT);
+    entry.group = null;
+    const restored = {
+      ...previous,
+      revision: revision.current,
+      updatedAt: current.current.updatedAt,
+    };
+    apply(restored);
+    return restored;
+  }, [apply]);
+
+  const redo = useCallback(() => {
+    const entry = history.current;
+    const next = entry.future.pop();
+    if (!next) return null;
+    entry.past = [...entry.past, current.current].slice(-HISTORY_LIMIT);
+    entry.group = null;
+    const restored = {
+      ...next,
+      revision: revision.current,
+      updatedAt: current.current.updatedAt,
+    };
+    apply(restored);
+    return restored;
+  }, [apply]);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -85,5 +155,5 @@ export function useBook(initialBook: Book) {
       if (timer.current) clearTimeout(timer.current);
     };
   }, []);
-  return { book, update, save, status, error };
+  return { book, update, save, status, error, undo, redo, ...historyState };
 }

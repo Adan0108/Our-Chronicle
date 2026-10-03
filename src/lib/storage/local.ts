@@ -5,13 +5,21 @@ import {
   rename,
   unlink,
   access,
+  copyFile,
+  readdir,
+  stat,
+  utimes,
 } from "node:fs/promises";
+import { constants } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { bookSchema, imageNameSchema, type Book } from "@/types/book";
 import { createSampleBook, sampleArtwork } from "./sample";
 import { StorageError, type BookStorage } from "./index";
+
+const TRASH_LIMIT = 3000;
+const TRASH_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
 export class LocalBookStorage implements BookStorage {
   // User files are accessed at runtime, never bundled into the application output.
@@ -28,6 +36,68 @@ export class LocalBookStorage implements BookStorage {
     if (!imageNameSchema.safeParse(filename).success)
       throw new StorageError("Invalid image name");
     return path.join(this.root, "images", filename);
+  }
+  private trashPath(filename: string) {
+    this.imagePath(filename);
+    return path.join(this.root, "images", ".trash", filename);
+  }
+  private async ensureImage(filename: string) {
+    const active = this.imagePath(filename);
+    try {
+      await access(active);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      // Retain the archive until a book commit succeeds, including failed saves.
+      try {
+        await copyFile(
+          this.trashPath(filename),
+          active,
+          constants.COPYFILE_EXCL,
+        );
+      } catch (restoreError) {
+        if ((restoreError as NodeJS.ErrnoException).code !== "EEXIST")
+          throw new StorageError(
+            "An image is missing. Please upload it again.",
+          );
+      }
+    }
+  }
+  private async archiveImages(filenames: Set<string>) {
+    if (!filenames.size) return;
+    await mkdir(path.join(this.root, "images", ".trash"), { recursive: true });
+    for (const filename of filenames) {
+      try {
+        await copyFile(this.imagePath(filename), this.trashPath(filename));
+        // Retention starts when removed, even if the source photo has an old mtime.
+        const removedAt = new Date();
+        await utimes(this.trashPath(filename), removedAt, removedAt);
+        await unlink(this.imagePath(filename));
+      } catch {
+        // A failed archive leaves the original image recoverable on disk.
+      }
+    }
+  }
+  private async pruneTrash() {
+    const directory = path.join(this.root, "images", ".trash");
+    const entries = await readdir(directory, { withFileTypes: true });
+    const files = await Promise.all(
+      entries
+        .filter(
+          (entry) =>
+            entry.isFile() && imageNameSchema.safeParse(entry.name).success,
+        )
+        .map(async (entry) => ({
+          filename: entry.name,
+          modified: (await stat(this.trashPath(entry.name))).mtimeMs,
+        })),
+    );
+    const cutoff = Date.now() - TRASH_MAX_AGE;
+    files.sort((a, b) => b.modified - a.modified);
+    for (let index = 0; index < files.length; index++)
+      if (index >= TRASH_LIMIT || files[index].modified < cutoff)
+        await unlink(this.trashPath(files[index].filename)).catch(
+          () => undefined,
+        );
   }
   private async atomicWrite(book: Book) {
     const temporary = path.join(this.root, `${randomUUID()}.tmp`);
@@ -76,15 +146,8 @@ export class LocalBookStorage implements BookStorage {
         );
       for (const page of book.pages)
         for (const el of page.elements) {
-          if (el.type === "image") {
-            try {
-              await access(this.imagePath(el.filename));
-            } catch {
-              throw new StorageError(
-                "An image is missing. Please upload it again.",
-              );
-            }
-          }
+          if (el.type === "image" && el.filename)
+            await this.ensureImage(el.filename);
         }
       const saved = {
         ...book,
@@ -95,20 +158,22 @@ export class LocalBookStorage implements BookStorage {
       const kept = new Set(
         saved.pages.flatMap((p) =>
           p.elements.flatMap((el) =>
-            el.type === "image" ? [el.filename] : [],
+            el.type === "image" && el.filename ? [el.filename] : [],
           ),
         ),
       );
       const removed = new Set(
         previous.pages.flatMap((p) =>
           p.elements.flatMap((el) =>
-            el.type === "image" && !kept.has(el.filename) ? [el.filename] : [],
+            el.type === "image" && el.filename && !kept.has(el.filename)
+              ? [el.filename]
+              : [],
           ),
         ),
       );
-      // Commit the book first; cleanup failure must not discard an otherwise successful save.
-      for (const filename of removed)
-        await unlink(this.imagePath(filename)).catch(() => undefined);
+      // Commit first; archive/cleanup failures cannot invalidate a successful save.
+      await this.archiveImages(removed).catch(() => undefined);
+      await this.pruneTrash().catch(() => undefined);
       return saved;
     });
   }
@@ -175,6 +240,9 @@ export class LocalBookStorage implements BookStorage {
           409,
         );
       await unlink(this.imagePath(filename)).catch((error) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+      await unlink(this.trashPath(filename)).catch((error) => {
         if (error.code !== "ENOENT") throw error;
       });
     });

@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
 import {
   ImagePlus,
   Type,
@@ -7,8 +8,25 @@ import {
   Plus,
   SlidersHorizontal,
   ArrowUp,
+  ArrowDown,
+  Copy,
+  Crop,
+  Lock,
+  LockOpen,
+  Layers,
+  Bold,
+  Italic,
+  LayoutTemplate,
 } from "lucide-react";
-import type { Book, BookPage, BookElement } from "@/types/book";
+import {
+  TEXT_PRESETS,
+  type Book,
+  type BookPage,
+  type BookElement,
+  type PageTemplate,
+} from "@/types/book";
+import { CropDialog } from "./crop-dialog";
+import { TemplateDialog } from "./template-dialog";
 
 type Props = {
   book: Book;
@@ -18,13 +36,68 @@ type Props = {
   onBookChange: (changes: Partial<Book>) => void;
   onPageChange: (changes: Partial<BookPage>) => void;
   onElementChange: (changes: Partial<BookElement>) => void;
+  onSelectElement: (id: string) => void;
   onAddText: () => void;
   onUpload: (file: File, replace?: boolean) => void;
   onDeleteElement: () => void;
-  onAddPage: () => void;
+  onDuplicateElement: () => void;
+  onLayerElement: (direction: "forward" | "backward") => void;
+  onAddPage: (template?: PageTemplate) => void;
   onDeletePage: () => void;
+  onDuplicatePage: () => void;
+  onMovePage: (direction: -1 | 1) => void;
   onReturnToBook: () => void;
 };
+
+function layerLabel(element: BookElement) {
+  const name = element.type === "text" ? element.text : element.caption;
+  return (
+    name.replace(/\s+/g, " ").trim().slice(0, 45) ||
+    (element.type === "image" ? "Untitled photo" : "Empty text")
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.value = String(value);
+  }, [value]);
+  return (
+    <input
+      ref={inputRef}
+      type="number"
+      aria-label={label}
+      min={min}
+      max={max}
+      defaultValue={value}
+      onChange={(event) => {
+        const next = event.target.valueAsNumber;
+        if (Number.isFinite(next) && next >= min && next <= max) onChange(next);
+      }}
+      onBlur={(event) => {
+        const next = event.target.valueAsNumber;
+        const valid = Number.isFinite(next)
+          ? Math.max(min, Math.min(max, next))
+          : value;
+        event.target.value = String(valid);
+        if (valid !== value) onChange(valid);
+      }}
+    />
+  );
+}
+
 export function Inspector({
   book,
   page,
@@ -33,13 +106,27 @@ export function Inspector({
   onBookChange,
   onPageChange,
   onElementChange,
+  onSelectElement,
   onAddText,
   onUpload,
   onDeleteElement,
+  onDuplicateElement,
+  onLayerElement,
   onAddPage,
   onDeletePage,
+  onDuplicatePage,
+  onMovePage,
   onReturnToBook,
 }: Props) {
+  const [cropping, setCropping] = useState(false);
+  const [choosingTemplate, setChoosingTemplate] = useState(false);
+  const elementIndex = page.elements.findIndex(
+    (item) => item.id === element?.id,
+  );
+  const pageIndex = book.pages.findIndex((item) => item.id === page.id);
+  const textDefaults =
+    element?.type === "text" ? TEXT_PRESETS[element.style] : null;
+
   return (
     <aside
       id="scrapbook-editor"
@@ -96,14 +183,14 @@ export function Inspector({
           <span className="section-label">
             {element.type === "text" ? "YOUR WORDS" : "YOUR PHOTOGRAPH"}
           </span>
-          {element.type === "text" ? (
+          {element.type === "text" && textDefaults ? (
             <>
               <label>
                 Text content
                 <textarea
                   aria-label="Text content"
                   maxLength={4000}
-                  rows={5}
+                  rows={4}
                   value={element.text}
                   onChange={(event) =>
                     onElementChange({ text: event.target.value })
@@ -113,10 +200,12 @@ export function Inspector({
               <label>
                 Text style
                 <select
+                  aria-label="Text style"
                   value={element.style}
-                  onChange={(event) =>
-                    onElementChange({ style: event.target.value as "body" })
-                  }
+                  onChange={(event) => {
+                    const style = event.target.value as typeof element.style;
+                    onElementChange({ style, ...TEXT_PRESETS[style] });
+                  }}
                 >
                   <option value="heading">Journal heading</option>
                   <option value="body">Body text</option>
@@ -124,8 +213,91 @@ export function Inspector({
                   <option value="label">Small label</option>
                 </select>
               </label>
+              <details className="text-appearance" open>
+                <summary>Typography</summary>
+                <label>
+                  Font family
+                  <select
+                    aria-label="Font family"
+                    value={element.fontFamily ?? textDefaults.fontFamily}
+                    onChange={(event) =>
+                      onElementChange({
+                        fontFamily: event.target.value as "serif",
+                      })
+                    }
+                  >
+                    <option value="serif">Classic journal</option>
+                    <option value="handwritten">Handwritten note</option>
+                    <option value="sans">Clean captions</option>
+                  </select>
+                </label>
+                <div className="inspector-field-grid">
+                  <label>
+                    Font size
+                    <NumberField
+                      key={element.id}
+                      label="Font size"
+                      min={8}
+                      max={72}
+                      value={element.fontSize ?? textDefaults.fontSize}
+                      onChange={(fontSize) => onElementChange({ fontSize })}
+                    />
+                  </label>
+                  <label>
+                    Text color
+                    <input
+                      type="color"
+                      aria-label="Text color"
+                      value={element.color ?? textDefaults.color}
+                      onChange={(event) =>
+                        onElementChange({ color: event.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="text-toggle-row">
+                  <button
+                    className="secondary-button"
+                    aria-label="Bold"
+                    aria-pressed={element.bold ?? textDefaults.bold}
+                    onClick={() =>
+                      onElementChange({
+                        bold: !(element.bold ?? textDefaults.bold),
+                      })
+                    }
+                  >
+                    <Bold size={15} />
+                  </button>
+                  <button
+                    className="secondary-button"
+                    aria-label="Italic"
+                    aria-pressed={element.italic ?? textDefaults.italic}
+                    onClick={() =>
+                      onElementChange({
+                        italic: !(element.italic ?? textDefaults.italic),
+                      })
+                    }
+                  >
+                    <Italic size={15} />
+                  </button>
+                  <label>
+                    Alignment
+                    <select
+                      aria-label="Text alignment"
+                      value={element.align ?? textDefaults.align}
+                      onChange={(event) =>
+                        onElementChange({ align: event.target.value as "left" })
+                      }
+                    >
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                    </select>
+                  </label>
+                </div>
+              </details>
             </>
-          ) : (
+          ) : element.type === "image" ? (
             <>
               <label>
                 Photo caption
@@ -141,6 +313,7 @@ export function Inspector({
               <label>
                 Photo frame
                 <select
+                  aria-label="Photo frame"
                   value={element.frame}
                   onChange={(event) =>
                     onElementChange({ frame: event.target.value as "polaroid" })
@@ -150,11 +323,29 @@ export function Inspector({
                   <option value="plain">No frame</option>
                 </select>
               </label>
+              <div className="element-actions photo-actions">
+                <button
+                  className="secondary-button"
+                  disabled={busy || !element.filename}
+                  onClick={() => setCropping(true)}
+                >
+                  <Crop size={14} /> Crop photo
+                </button>
+                {element.crop && (
+                  <button
+                    className="secondary-button"
+                    disabled={busy}
+                    onClick={() => onElementChange({ crop: null })}
+                  >
+                    Reset crop
+                  </button>
+                )}
+              </div>
               <label
                 className={`secondary-button replace-button ${busy ? "disabled" : ""}`}
               >
                 <Upload size={14} />
-                Replace photo
+                {element.filename ? "Replace photo" : "Add photo to frame"}
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -168,35 +359,116 @@ export function Inspector({
                 />
               </label>
             </>
-          )}
+          ) : null}
           <label className="rotation-label">
-            A little tilt <span>{element.rotation}°</span>
-            <input
-              type="range"
-              aria-label="Element rotation"
-              min={-15}
-              max={15}
+            Rotation (degrees)
+            <NumberField
+              key={element.id}
+              label="Rotation (degrees)"
+              min={-180}
+              max={180}
               value={element.rotation}
-              onChange={(event) =>
-                onElementChange({ rotation: Number(event.target.value) })
-              }
+              onChange={(rotation) => onElementChange({ rotation })}
             />
           </label>
+          <input
+            type="range"
+            aria-label="Element rotation"
+            min={-180}
+            max={180}
+            value={element.rotation}
+            onChange={(event) =>
+              onElementChange({ rotation: Number(event.target.value) })
+            }
+          />
+          <div className="element-actions">
+            <button
+              className="secondary-button"
+              onClick={onDuplicateElement}
+              disabled={busy || page.elements.length >= 60}
+            >
+              <Copy size={14} /> Duplicate{" "}
+              {element.type === "image" ? "image" : "text"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => onElementChange({ locked: !element.locked })}
+              disabled={busy}
+              aria-pressed={!!element.locked}
+            >
+              {element.locked ? <LockOpen size={14} /> : <Lock size={14} />}
+              {element.locked ? "Unlock position" : "Lock position"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => onLayerElement("forward")}
+              disabled={busy || elementIndex >= page.elements.length - 1}
+            >
+              <ArrowUp size={14} /> Bring forward
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => onLayerElement("backward")}
+              disabled={busy || elementIndex <= 0}
+            >
+              <ArrowDown size={14} /> Send backward
+            </button>
+          </div>
+          {element.locked && (
+            <p className="field-hint">
+              Position and size are locked. You can still edit its appearance.
+            </p>
+          )}
           <button
             className="danger-button"
             onClick={onDeleteElement}
             disabled={busy}
           >
-            <Trash2 size={14} />
-            Delete {element.type === "text" ? "text" : "image"}
+            <Trash2 size={14} /> Delete{" "}
+            {element.type === "text" ? "text" : "image"}
           </button>
         </section>
       )}
+      <details className="inspector-section layers-section" open>
+        <summary>
+          <Layers size={14} /> Layers <span>{page.elements.length}</span>
+        </summary>
+        <p className="field-hint">
+          Frontmost first. Select a layer even when it is covered or locked.
+        </p>
+        <div className="layer-list">
+          {[...page.elements].reverse().map((item, index) => (
+            <button
+              key={item.id}
+              className={`layer-button ${item.id === element?.id ? "selected" : ""}`}
+              aria-label={`Select layer: ${layerLabel(item)} (layer ${page.elements.length - index})`}
+              aria-pressed={item.id === element?.id}
+              data-testid={`layer-${item.id}`}
+              onClick={() => onSelectElement(item.id)}
+            >
+              {item.type === "image" ? (
+                <ImagePlus size={13} />
+              ) : (
+                <Type size={13} />
+              )}
+              <span>{layerLabel(item)}</span>
+              {item.locked && <Lock size={12} aria-label="Position locked" />}
+              <span className="layer-number">
+                {page.elements.length - index}
+              </span>
+            </button>
+          ))}
+          {!page.elements.length && (
+            <p className="field-hint">This page is a fresh start.</p>
+          )}
+        </div>
+      </details>
       <section className="inspector-section">
         <span className="section-label">THIS PAGE</span>
         <label>
           Page name
           <input
+            aria-label="Page name"
             maxLength={100}
             value={page.title}
             onChange={(event) =>
@@ -207,6 +479,7 @@ export function Inspector({
         <label>
           Paper
           <select
+            aria-label="Paper"
             value={page.paper}
             onChange={(event) =>
               onPageChange({ paper: event.target.value as "cream" })
@@ -220,11 +493,10 @@ export function Inspector({
         <div className="page-actions">
           <button
             className="secondary-button"
-            onClick={onAddPage}
+            onClick={() => onAddPage()}
             disabled={busy || book.pages.length >= 100}
           >
-            <Plus size={14} />
-            Add page
+            <Plus size={14} /> Add page
           </button>
           <button
             title="Delete selected page"
@@ -236,6 +508,39 @@ export function Inspector({
             <Trash2 size={15} />
           </button>
         </div>
+        <button
+          className="secondary-button template-picker-button"
+          onClick={() => setChoosingTemplate(true)}
+          disabled={busy || book.pages.length >= 100}
+        >
+          <LayoutTemplate size={14} /> New page from template
+        </button>
+        <div className="element-actions page-extra-actions">
+          <button
+            className="secondary-button"
+            onClick={onDuplicatePage}
+            disabled={busy || book.pages.length >= 100}
+          >
+            <Copy size={14} /> Duplicate page
+          </button>
+          <span className="page-position">
+            Page {pageIndex + 1} of {book.pages.length}
+          </span>
+          <button
+            className="secondary-button"
+            onClick={() => onMovePage(-1)}
+            disabled={busy || pageIndex <= 0}
+          >
+            <ArrowUp size={14} /> Move page earlier
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => onMovePage(1)}
+            disabled={busy || pageIndex >= book.pages.length - 1}
+          >
+            <ArrowDown size={14} /> Move page later
+          </button>
+        </div>
         {book.pages.length <= 2 && (
           <p className="field-hint">Keep at least two pages in your book.</p>
         )}
@@ -245,6 +550,7 @@ export function Inspector({
         <label>
           Book title
           <input
+            aria-label="Book title"
             maxLength={100}
             value={book.title}
             onChange={(event) =>
@@ -255,6 +561,7 @@ export function Inspector({
         <label>
           Subtitle
           <textarea
+            aria-label="Subtitle"
             rows={2}
             maxLength={200}
             value={book.subtitle}
@@ -262,6 +569,25 @@ export function Inspector({
           />
         </label>
       </details>
+      {cropping && element?.type === "image" && element.filename && (
+        <CropDialog
+          element={element}
+          onCancel={() => setCropping(false)}
+          onApply={(crop) => {
+            onElementChange({ crop });
+            setCropping(false);
+          }}
+        />
+      )}
+      {choosingTemplate && (
+        <TemplateDialog
+          onCancel={() => setChoosingTemplate(false)}
+          onChoose={(template) => {
+            onAddPage(template);
+            setChoosingTemplate(false);
+          }}
+        />
+      )}
     </aside>
   );
 }

@@ -40,9 +40,11 @@ Both modes use the same local data folder and default address. This application 
 - **Read:** Click the cover or drag its right corner across the spine to open. Turn pages by dragging a corner, clicking a page, using navigation arrows, or choosing a page from **Contents**.
 - **Close:** Return to the first spread and drag its left corner rightward across the spine. The close-book control beneath the first spread is a fallback. Reopen the cover normally; closing does not change saved content.
 - **Edit:** Choose **Edit scrapbook**; **Done editing** returns to reading. Page-turn gestures pause while editing.
-- **Text:** Click a text block and change **Text content** or **Text style** in the editor. Use **Text** to add a block and **Delete text** to remove the selected block.
-- **Photos:** Select a page, then choose **Photo** to upload a JPEG, PNG, or WebP (up to 10 MB / 24 megapixels). Select a photo to edit its caption/frame, **Replace photo**, or **Delete image**. Drag the selected photo to move it; drag a corner to resize it.
-- **Pages and cover:** Use **Add page** or the delete-page button in the editor. Deletion asks for confirmation, and at least two pages must remain. Expand **Book cover details** to edit the title and subtitle.
+- **Text:** Click a text block to edit its content, preset, curated font family, size, color, bold/italic, alignment, and rotation. Use **Text** to add a block and **Delete text** to remove it.
+- **Photos:** Select a page, then choose **Photo** to upload a JPEG, PNG, or WebP (up to 10 MB / 24 megapixels). Edit captions/frames, rotate, **Replace photo**, or **Delete image**. Drag to move and drag a corner to resize. **Crop photo** opens a drag/zoom dialog; **Apply crop** saves the crop, while **Reset crop** restores the full photo. Cropping preserves the source image.
+- **Layers and locks:** Duplicate selected text/photos, **Bring forward** or **Send backward** one layer at a time. **Layers** lists frontmost elements first, including covered items. **Lock position** prevents movement/resizing while allowing appearance edits; **Unlock position** restores movement.
+- **Pages and cover:** Add a blank page, duplicate a page, move it earlier/later, or choose **New page from template** (journal, single photo, two photos, collage). Select empty photo frames and use **Add photo to frame** to fill them. Deletion asks for confirmation, and at least two pages must remain. Expand **Book cover details** to edit the title/subtitle.
+- **Undo/redo:** Use the header controls or Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (also Ctrl+Y) outside text inputs. History keeps up to 50 steps in the current browser session; refresh clears it. Typing/slider changes are grouped until an autosave or another action. Undo/redo changes autosave normally.
 - **Autosave:** Changes save after a short pause. Wait for **Saved on this device** before refreshing or closing. Failed saves offer a retry; a stale-tab conflict requires reloading that tab to get the latest book.
 - **Smaller screens:** View full-size pages by scrolling sideways or using **Show left page** / **Show right page**. Use navigation arrows to turn pages. The editor appears below the book; **Edit selected item** and **Back to the page** help you move between them.
 
@@ -52,6 +54,8 @@ Personal content is written by the local Next.js server to files on the machine 
 
 - `storage/book.json` — book title, pages, text, image references, and element positions.
 - `storage/images/` — sample photographs and uploaded images.
+
+Removed/replaced photos have recovery copies in `storage/images/.trash/` for undo, retained for up to seven days and 3,000 files. They are not served as active images. Cleanup runs on subsequent saves.
 
 Content is stored in this folder, **not in a database, browser storage, or cloud service**. Uploads are served through the API and do not enter `public/` or source folders.
 
@@ -85,9 +89,10 @@ Formatting commands: `npm run format` and `npm run format:check`.
 - One book per storage folder. Run one server instance per folder; there are no accounts or shared multi-user editing.
 - Books support 2–100 pages and up to 60 elements per page.
 - Desktop/laptop is the primary experience. Narrow screens use horizontal page viewing and an editor below the book.
-- Text boxes have fixed dimensions; resize them when longer text needs more space.
+- Text boxes do not expand automatically; resize them when longer text needs more space.
 - Uploaded images are converted to WebP and limited to 2400 pixels on the longest edge. Original uploaded files are not retained. Interrupted uploads can leave unused image files.
-- No undo/history, photo crop tool, import/export UI, stickers, or cloud sync.
+- Undo history is session-only; very long sessions can outlast image-recovery retention. Crop uses the photo frame's aspect ratio.
+- No import/export UI, stickers, or cloud sync.
 
 ## Project Structure
 
@@ -106,12 +111,13 @@ Our-Chronicle/
 │   │   │   ├── cover.tsx             # Front cover in the native page-flip surface
 │   │   │   ├── reader.tsx            # Page-flip library integration
 │   │   │   └── page-renderer.tsx     # Data-driven page rendering
-│   │   ├── editor/                   # Inspector and deletion dialog
+│   │   ├── editor/                   # Inspector, crop/template dialogs, deletion
 │   │   └── scrapbook.tsx             # Reading/editing UI and interactions
 │   ├── hooks/
-│   │   └── use-book.ts               # Autosave, save status, and revisions
+│   │   └── use-book.ts               # Autosave, revisions, and bounded history
 │   ├── lib/
 │   │   ├── api.ts                    # Request checks and API errors
+│   │   ├── editor.ts                 # Data-driven templates and duplication
 │   │   └── storage/
 │   │       ├── index.ts              # Storage interface and instance
 │   │       ├── local.ts              # Filesystem storage and safe writes
@@ -122,12 +128,13 @@ Our-Chronicle/
 │   ├── book.json                     # Local book state
 │   └── images/                       # Local images and sample attribution
 ├── tests/
-│   └── scrapbook.spec.ts             # Browser flows and API checks
+│   ├── scrapbook.spec.ts             # Browser flows and API checks
+│   └── editor-phase.spec.ts           # Formatting, layers, templates, and history
 ├── playwright.config.ts             # Isolated E2E server configuration
 └── package.json                      # Dependencies and scripts
 ```
 
-Pages contain arrays of text and image elements rather than hard-coded page components. The reader uses `react-pageflip` / StPageFlip; the editor uses `react-rnd`. API routes validate data and call the storage interface, keeping filesystem persistence separate from the UI.
+Pages contain arrays of text and image elements rather than hard-coded page components. Array order defines layers from back to front. Optional formatting, crop, and lock fields keep existing books compatible; absent fields retain their original presets. The reader uses `react-pageflip` / StPageFlip; the editor uses `react-rnd` and `react-easy-crop` for crop interactions. API routes validate data and call the storage interface, keeping filesystem persistence separate from the UI.
 
 ### Where to change things
 
@@ -144,13 +151,16 @@ src/components/book/page-renderer.tsx
 Editor UI:
 src/components/editor/
 
+Templates and duplication:
+src/lib/editor.ts
+
 Reading/editing controls:
 src/components/scrapbook.tsx
 
 Theme/styles:
 src/app/globals.css
 
-Autosave:
+Autosave and undo/redo:
 src/hooks/use-book.ts
 
 Persistence:
