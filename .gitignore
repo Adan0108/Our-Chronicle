@@ -8,6 +8,7 @@ artifacts/
 .test-storage/
 storage/*.tmp
 storage/images/.trash/
+storage/audio/.trash/
 storage/backups/
 storage/.incoming-*/
 .env*

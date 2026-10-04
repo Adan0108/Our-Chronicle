@@ -5,9 +5,15 @@ import sharp from "sharp";
 import * as yauzl from "yauzl";
 import { ZipFile } from "yazl";
 import { z } from "zod";
-import { bookSchema, imageNameSchema, type Book } from "@/types/book";
+import {
+  bookSchema,
+  imageNameSchema,
+  audioNameSchema,
+  type Book,
+} from "@/types/book";
 import { bookElements } from "@/lib/cover";
-import { StorageError } from "./errors";
+import { isStorageError, StorageError } from "./errors";
+import { AUDIO_MAX_BYTES, validateAudio } from "./audio";
 
 // v1 ships ESM declarations with a CommonJS export assignment; load its CJS API.
 const crc32 = createRequire(path.join(process.cwd(), "package.json"))(
@@ -21,11 +27,11 @@ export const CONTENT_MAX_BYTES = 500 * 1024 * 1024;
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const BOOK_MAX_BYTES = 1024 * 1024;
 const MANIFEST_MAX_BYTES = 16 * 1024;
-const ENTRY_LIMIT = 6063;
+const ENTRY_LIMIT = 6065;
 const PIXEL_LIMIT = 24_000_000;
 const manifestSchema = z.object({
   format: z.literal("our-chronicle"),
-  formatVersion: z.union([z.literal(1), z.literal(2)]),
+  formatVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   exportedAt: z.iso.datetime(),
 });
 
@@ -35,6 +41,26 @@ export function referencedImages(book: Book): Set<string> {
       element.type === "image" && element.filename ? [element.filename] : [],
     ),
   );
+}
+
+export function referencedAudio(book: Book): Set<string> {
+  return new Set(book.audio ? [book.audio.filename] : []);
+}
+
+export function archiveVersion(book: Book): 1 | 2 | 3 {
+  if (
+    book.theme !== undefined ||
+    book.audio !== undefined ||
+    bookElements(book).some(
+      (element) =>
+        element.type === "sticker" ||
+        (element.type === "image" &&
+          (element.kind !== undefined ||
+            !["plain", "polaroid"].includes(element.frame))),
+    )
+  )
+    return 3;
+  return book.cover ? 2 : 1;
 }
 
 function parseJson(bytes: Buffer, filename: string): unknown {
@@ -63,10 +89,11 @@ function validateManifest(bytes: Buffer) {
     value.format === "our-chronicle" &&
     "formatVersion" in value &&
     value.formatVersion !== 1 &&
-    value.formatVersion !== 2
+    value.formatVersion !== 2 &&
+    value.formatVersion !== 3
   )
     throw new StorageError(
-      "This archive format version is not supported. Choose a version 1 or 2 Our Chronicle export.",
+      "This archive format version is not supported. Choose a version 1, 2, or 3 Our Chronicle export.",
     );
   const manifest = manifestSchema.safeParse(value);
   if (!manifest.success)
@@ -143,6 +170,7 @@ async function collectOutput(stream: Readable): Promise<Buffer> {
 export async function encodeArchive(
   incoming: Book,
   images: Map<string, Buffer>,
+  audio: Map<string, Buffer> = new Map(),
 ): Promise<Buffer> {
   const book = parseBook(incoming);
   const bookBytes = Buffer.from(JSON.stringify(book, null, 2) + "\n");
@@ -155,7 +183,7 @@ export async function encodeArchive(
     JSON.stringify(
       {
         format: "our-chronicle",
-        formatVersion: book.cover ? 2 : 1,
+        formatVersion: archiveVersion(book),
         exportedAt: new Date().toISOString(),
       },
       null,
@@ -178,6 +206,21 @@ export async function encodeArchive(
       );
     await validateImage(filename, bytes);
   }
+  const audioNames = [...referencedAudio(book)];
+  for (const filename of audioNames) {
+    const bytes = audio.get(filename);
+    if (!bytes)
+      throw new StorageError(
+        `Audio ${filename} is missing. Restore it before exporting.`,
+      );
+    total += bytes.length;
+    if (total > CONTENT_MAX_BYTES)
+      throw new StorageError(
+        "The book exceeds the 500 MB uncompressed archive limit.",
+        413,
+      );
+    await validateAudio(filename, bytes);
+  }
 
   const archive = new ZipFile();
   const output = archive.outputStream as Readable;
@@ -189,6 +232,10 @@ export async function encodeArchive(
     archive.addBuffer(images.get(filename)!, `images/${filename}`, {
       compress: false,
     });
+  for (const filename of audioNames)
+    archive.addBuffer(audio.get(filename)!, `audio/${filename}`, {
+      compress: false,
+    });
   archive.end();
   return result;
 }
@@ -197,14 +244,19 @@ function entryLimit(entry: yauzl.Entry): number {
   const filename = entry.fileName;
   if (filename === "book.json") return BOOK_MAX_BYTES;
   if (filename === "manifest.json") return MANIFEST_MAX_BYTES;
-  if (filename === "images/") return 0;
+  if (filename === "images/" || filename === "audio/") return 0;
   if (
     filename.startsWith("images/") &&
     imageNameSchema.safeParse(filename.slice("images/".length)).success
   )
     return IMAGE_MAX_BYTES;
+  if (
+    filename.startsWith("audio/") &&
+    audioNameSchema.safeParse(filename.slice("audio/".length)).success
+  )
+    return AUDIO_MAX_BYTES;
   throw new StorageError(
-    "The archive contains an unsafe path or unexpected file. Only book.json, manifest.json, and referenced images are allowed.",
+    "The archive contains an unsafe path or unexpected file. Only book.json, manifest.json, and referenced images/audio are allowed.",
   );
 }
 
@@ -225,7 +277,7 @@ function validateEntry(entry: yauzl.Entry, seen: Set<string>): number {
     throw new StorageError("The archive contains an unsafe ZIP path.");
   const limit = entryLimit(entry);
   const mode = (entry.externalFileAttributes >>> 16) & 0o170000;
-  const directory = filename === "images/";
+  const directory = filename === "images/" || filename === "audio/";
   if (
     (entry.generalPurposeBitFlag & 0x41) !== 0 ||
     (entry.compressionMethod !== 0 && entry.compressionMethod !== 8) ||
@@ -249,9 +301,11 @@ function validateEntry(entry: yauzl.Entry, seen: Set<string>): number {
   return limit;
 }
 
-export async function decodeArchive(
-  bytes: Buffer,
-): Promise<{ book: Book; images: Map<string, Buffer> }> {
+export async function decodeArchive(bytes: Buffer): Promise<{
+  book: Book;
+  images: Map<string, Buffer>;
+  audio: Map<string, Buffer>;
+}> {
   if (!bytes.length || bytes.length > ARCHIVE_MAX_BYTES)
     throw new StorageError("Choose a ZIP archive smaller than 250 MB.", 413);
   let zip: yauzl.ZipFile;
@@ -288,7 +342,7 @@ export async function decodeArchive(
       activeStream?.destroy();
       zip.close();
       reject(
-        error instanceof StorageError
+        isStorageError(error)
           ? error
           : new StorageError("The ZIP archive is malformed or corrupted."),
       );
@@ -344,13 +398,29 @@ export async function decodeArchive(
           );
         const manifest = validateManifest(manifestBytes);
         const book = parseBook(parseJson(bookBytes, "book.json"));
-        if (book.cover && manifest.formatVersion !== 2)
+        if (archiveVersion(book) === 3 && manifest.formatVersion < 3)
+          throw new StorageError(
+            "Themes, decorations, photo styles, and audio require a version 3 Our Chronicle archive.",
+          );
+        if (book.cover && manifest.formatVersion < 2)
           throw new StorageError(
             "Customized covers require a version 2 Our Chronicle archive.",
           );
         const references = referencedImages(book);
         const images = new Map<string, Buffer>();
+        const audioReferences = referencedAudio(book);
+        const audio = new Map<string, Buffer>();
         for (const [filename, data] of entries) {
+          if (filename.startsWith("audio/") && filename !== "audio/") {
+            const audioName = filename.slice("audio/".length);
+            if (!audioReferences.has(audioName))
+              throw new StorageError(
+                "The archive contains audio that is not referenced by the book.",
+              );
+            await validateAudio(audioName, data);
+            audio.set(audioName, data);
+            continue;
+          }
           if (!filename.startsWith("images/") || filename === "images/")
             continue;
           const imageName = filename.slice("images/".length);
@@ -364,10 +434,13 @@ export async function decodeArchive(
         for (const filename of references)
           if (!images.has(filename))
             throw new StorageError(`The archive is missing image ${filename}.`);
+        for (const filename of audioReferences)
+          if (!audio.has(filename))
+            throw new StorageError(`The archive is missing audio ${filename}.`);
         if (!settled) {
           settled = true;
           zip.close();
-          resolve({ book, images });
+          resolve({ book, images, audio });
         }
       })().catch(fail);
     });

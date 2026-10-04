@@ -17,6 +17,8 @@ import {
   Bold,
   Italic,
   LayoutTemplate,
+  Sparkles,
+  Palette,
 } from "lucide-react";
 import {
   TEXT_PRESETS,
@@ -25,10 +27,15 @@ import {
   type BookPage,
   type BookElement,
   type PageTemplate,
+  type StickerAsset,
+  type BookTheme,
 } from "@/types/book";
 import { COVER_STYLES } from "@/lib/cover";
+import { DECORATIONS } from "@/lib/decorations";
+import { THEMES } from "@/lib/themes";
 import { CropDialog } from "./crop-dialog";
 import { TemplateDialog } from "./template-dialog";
+import { DecorationDialog } from "./decoration-dialog";
 
 type Props = {
   book: Book;
@@ -53,13 +60,25 @@ type Props = {
   onCoverChange?: (changes: Partial<BookCover>) => void;
   onEditCover?: () => void;
   onEditPages?: () => void;
+  onAddSticker?: (asset: StickerAsset) => void;
+  onUploadDecoration?: (file: File) => void;
+  onThemeChange?: (theme: BookTheme) => void;
 };
 
 function layerLabel(element: BookElement) {
-  const name = element.type === "text" ? element.text : element.caption;
+  const name =
+    element.type === "text"
+      ? element.text
+      : element.type === "image"
+        ? element.caption
+        : element.label || DECORATIONS[element.asset].label;
   return (
     name.replace(/\s+/g, " ").trim().slice(0, 45) ||
-    (element.type === "image" ? "Untitled photo" : "Empty text")
+    (element.type === "image"
+      ? element.kind === "decoration"
+        ? "Untitled decoration"
+        : "Untitled photo"
+      : "Empty text")
   );
 }
 
@@ -127,9 +146,13 @@ export function Inspector({
   onCoverChange,
   onEditCover,
   onEditPages,
+  onAddSticker,
+  onUploadDecoration,
+  onThemeChange,
 }: Props) {
   const [cropping, setCropping] = useState(false);
   const [choosingTemplate, setChoosingTemplate] = useState(false);
+  const [choosingDecoration, setChoosingDecoration] = useState(false);
   const elements = cover?.elements ?? page.elements;
   const elementIndex = elements.findIndex((item) => item.id === element?.id);
   const pageIndex = book.pages.findIndex((item) => item.id === page.id);
@@ -235,6 +258,15 @@ export function Inspector({
               }}
             />
           </label>
+          {onAddSticker && onUploadDecoration && (
+            <button
+              className="decoration-tool"
+              disabled={busy || elements.length >= 60}
+              onClick={() => setChoosingDecoration(true)}
+            >
+              <Sparkles size={20} /> Decorations
+            </button>
+          )}
         </div>
         <p className="field-hint">
           Select an element to edit it. Drag it into place, then resize from a
@@ -247,7 +279,11 @@ export function Inspector({
           className="inspector-section element-inspector"
         >
           <span className="section-label">
-            {element.type === "text" ? "YOUR WORDS" : "YOUR PHOTOGRAPH"}
+            {element.type === "text"
+              ? "YOUR WORDS"
+              : element.type === "sticker" || element.kind === "decoration"
+                ? "YOUR DECORATION"
+                : "YOUR PHOTOGRAPH"}
           </span>
           {element.type === "text" && textDefaults ? (
             <>
@@ -375,10 +411,31 @@ export function Inspector({
             </>
           ) : element.type === "image" ? (
             <>
+              <label className="image-kind-field">
+                Image use
+                <select
+                  aria-label="Image use"
+                  value={element.kind ?? "photo"}
+                  disabled={busy}
+                  onChange={(event) => {
+                    const kind = event.target.value as "photo" | "decoration";
+                    onElementChange({ kind });
+                  }}
+                >
+                  <option value="photo">Photograph</option>
+                  <option value="decoration">Transparent decoration</option>
+                </select>
+              </label>
               <label>
-                Photo caption
+                {element.kind === "decoration"
+                  ? "Decoration name"
+                  : "Photo caption"}
                 <input
-                  aria-label="Photo caption"
+                  aria-label={
+                    element.kind === "decoration"
+                      ? "Decoration name"
+                      : "Photo caption"
+                  }
                   maxLength={200}
                   value={element.caption}
                   onChange={(event) =>
@@ -386,26 +443,37 @@ export function Inspector({
                   }
                 />
               </label>
-              <label>
-                Photo frame
-                <select
-                  aria-label="Photo frame"
-                  value={element.frame}
-                  onChange={(event) =>
-                    onElementChange({ frame: event.target.value as "polaroid" })
-                  }
-                >
-                  <option value="polaroid">Polaroid</option>
-                  <option value="plain">No frame</option>
-                </select>
-              </label>
+              {element.kind !== "decoration" && (
+                <label>
+                  Photo frame
+                  <select
+                    aria-label="Photo frame"
+                    value={element.frame}
+                    onChange={(event) =>
+                      onElementChange({
+                        frame: event.target.value as "polaroid",
+                      })
+                    }
+                  >
+                    <option value="polaroid">Polaroid</option>
+                    <option value="plain">No frame</option>
+                    <option value="soft-shadow">Soft shadow</option>
+                    <option value="paper">Paper frame</option>
+                    <option value="taped">Taped photo</option>
+                    <option value="borderless">Borderless</option>
+                  </select>
+                </label>
+              )}
               <div className="element-actions photo-actions">
                 <button
                   className="secondary-button"
                   disabled={busy || !element.filename}
                   onClick={() => setCropping(true)}
                 >
-                  <Crop size={14} /> Crop photo
+                  <Crop size={14} />{" "}
+                  {element.kind === "decoration"
+                    ? "Crop decoration"
+                    : "Crop photo"}
                 </button>
                 {element.crop && (
                   <button
@@ -421,7 +489,11 @@ export function Inspector({
                 className={`secondary-button replace-button ${busy ? "disabled" : ""}`}
               >
                 <Upload size={14} />
-                {element.filename ? "Replace photo" : "Add photo to frame"}
+                {element.kind === "decoration"
+                  ? "Replace decoration"
+                  : element.filename
+                    ? "Replace photo"
+                    : "Add photo to frame"}
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -434,6 +506,35 @@ export function Inspector({
                   }}
                 />
               </label>
+            </>
+          ) : element.type === "sticker" ? (
+            <>
+              <p className="field-hint">{DECORATIONS[element.asset].label}</p>
+              <label>
+                Sticker color
+                <input
+                  type="color"
+                  aria-label="Sticker color"
+                  value={element.color ?? DECORATIONS[element.asset].color}
+                  disabled={busy}
+                  onChange={(event) =>
+                    onElementChange({ color: event.target.value })
+                  }
+                />
+              </label>
+              {element.asset === "date-label" && (
+                <label>
+                  Sticker label
+                  <input
+                    aria-label="Sticker label"
+                    maxLength={40}
+                    value={element.label ?? ""}
+                    onChange={(event) =>
+                      onElementChange({ label: event.target.value })
+                    }
+                  />
+                </label>
+              )}
             </>
           ) : null}
           <label className="rotation-label">
@@ -464,7 +565,11 @@ export function Inspector({
               disabled={busy || elements.length >= 60}
             >
               <Copy size={14} /> Duplicate{" "}
-              {element.type === "image" ? "image" : "text"}
+              {element.type === "sticker"
+                ? "sticker"
+                : element.type === "image"
+                  ? "image"
+                  : "text"}
             </button>
             <button
               className="secondary-button"
@@ -501,7 +606,11 @@ export function Inspector({
             disabled={busy}
           >
             <Trash2 size={14} /> Delete{" "}
-            {element.type === "text" ? "text" : "image"}
+            {element.type === "sticker"
+              ? "sticker"
+              : element.type === "text"
+                ? "text"
+                : "image"}
           </button>
         </section>
       )}
@@ -524,6 +633,8 @@ export function Inspector({
             >
               {item.type === "image" ? (
                 <ImagePlus size={13} />
+              ) : item.type === "sticker" ? (
+                <Sparkles size={13} />
               ) : (
                 <Type size={13} />
               )}
@@ -541,6 +652,34 @@ export function Inspector({
           )}
         </div>
       </details>
+      {onThemeChange && (
+        <details className="inspector-section theme-settings">
+          <summary>
+            <Palette size={14} /> Book theme
+          </summary>
+          <label>
+            Scrapbook theme
+            <select
+              aria-label="Scrapbook theme"
+              value={book.theme ?? "cafe"}
+              disabled={busy}
+              onChange={(event) =>
+                onThemeChange(event.target.value as BookTheme)
+              }
+            >
+              {Object.entries(THEMES).map(([value, theme]) => (
+                <option value={value} key={value}>
+                  {theme.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="field-hint">
+            A change of atmosphere. Your words, photos, and their positions stay
+            yours.
+          </p>
+        </details>
+      )}
       {!cover && (
         <>
           <section className="inspector-section">
@@ -671,6 +810,19 @@ export function Inspector({
           onChoose={(template) => {
             onAddPage(template);
             setChoosingTemplate(false);
+          }}
+        />
+      )}
+      {choosingDecoration && onAddSticker && onUploadDecoration && (
+        <DecorationDialog
+          onCancel={() => setChoosingDecoration(false)}
+          onChoose={(asset) => {
+            onAddSticker(asset);
+            setChoosingDecoration(false);
+          }}
+          onUpload={(file) => {
+            onUploadDecoration(file);
+            setChoosingDecoration(false);
           }}
         />
       )}

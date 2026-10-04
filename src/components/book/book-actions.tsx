@@ -205,8 +205,8 @@ export function BookActions({
             {view === "options"
               ? "Your memories stay on this machine. Export a portable copy for safekeeping or moving to another computer."
               : view === "import"
-                ? "Choose an Our Chronicle ZIP. Importing replaces the current book and images after the archive is validated. A local safety backup is saved first."
-                : "Your current pages and photos will be replaced with the original sample scrapbook. A local safety backup is saved first."}
+                ? "Choose an Our Chronicle ZIP. Importing replaces your book, images, and audio after the archive is validated. A local safety backup is saved first."
+                : "Your book, photos, decorations, theme, and audio will be replaced with the original sample scrapbook. A local safety backup is saved first."}
           </p>
 
           {view === "options" ? (
@@ -220,7 +220,9 @@ export function BookActions({
                 <Download size={20} aria-hidden="true" />
                 <span>
                   <strong>Export Book</strong>
-                  <small>A complete ZIP backup, including your photos.</small>
+                  <small>
+                    A complete ZIP backup, including images and audio.
+                  </small>
                 </span>
               </button>
               <button

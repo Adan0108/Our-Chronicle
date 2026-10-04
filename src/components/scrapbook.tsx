@@ -17,6 +17,9 @@ import {
   Undo2,
   Redo2,
   X,
+  Gift,
+  Maximize,
+  Minimize,
 } from "lucide-react";
 import { useBook } from "@/hooks/use-book";
 import {
@@ -25,6 +28,9 @@ import {
   type BookCover,
   type BookPage,
   type PageTemplate,
+  type StickerAsset,
+  type BookAudio,
+  type BookTheme,
 } from "@/types/book";
 import {
   createPageFromTemplate,
@@ -38,6 +44,8 @@ import { PageRenderer, ImageRevisionContext } from "./book/page-renderer";
 import { Inspector } from "./editor/inspector";
 import { DeletePageDialog } from "./editor/delete-page-dialog";
 import { BookActions } from "./book/book-actions";
+import { BookAmbience } from "./book/ambience";
+import { createSticker } from "@/lib/decorations";
 
 export function Scrapbook({
   initialBook,
@@ -71,10 +79,45 @@ export function Scrapbook({
   const [transferBusy, setTransferBusy] = useState(false);
   const [deletePage, setDeletePage] = useState(false);
   const [contentsOpen, setContentsOpen] = useState(false);
+  const [presentation, setPresentation] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [audioBusy, setAudioBusy] = useState(false);
+  const presentationButton = useRef<HTMLButtonElement>(null);
+  const exitPresentationButton = useRef<HTMLButtonElement>(null);
+  const wasFullscreen = useRef(false);
   const reader = useRef<ReaderHandle | null>(null);
   const spreadScrollRef = useRef<HTMLDivElement>(null);
   const wasOpened = useRef(false);
   const [needsPan, setNeedsPan] = useState(false);
+  const assetBusy = busy || audioBusy;
+  const exitPresentation = useCallback(() => {
+    setPresentation(false);
+    if (document.fullscreenElement) void document.exitFullscreen();
+    requestAnimationFrame(() => presentationButton.current?.focus());
+  }, []);
+  useEffect(() => {
+    const changed = () => {
+      const active = Boolean(document.fullscreenElement);
+      setFullscreen(active);
+      if (wasFullscreen.current && !active) exitPresentation();
+      wasFullscreen.current = active;
+    };
+    document.addEventListener("fullscreenchange", changed);
+    return () => document.removeEventListener("fullscreenchange", changed);
+  }, [exitPresentation]);
+  useEffect(() => {
+    if (!presentation) return;
+    exitPresentationButton.current?.focus();
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // Let the native ambience popover consume its first Escape.
+      if (document.querySelector(":popover-open, dialog[open]")) return;
+      event.preventDefault();
+      exitPresentation();
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [presentation, exitPresentation]);
   useEffect(() => {
     const closed = !opened && wasOpened.current;
     wasOpened.current = opened;
@@ -144,7 +187,7 @@ export function Scrapbook({
   );
   const applyHistory = useCallback(
     (direction: "undo" | "redo") => {
-      if (busy || transferBusy) return;
+      if (assetBusy || transferBusy) return;
       const restored = direction === "undo" ? undo() : redo();
       if (!restored) return;
       if (coverEditing) {
@@ -194,7 +237,7 @@ export function Scrapbook({
     [
       activePageId,
       book.pages,
-      busy,
+      assetBusy,
       transferBusy,
       coverEditing,
       cover.elements,
@@ -225,7 +268,7 @@ export function Scrapbook({
   }, [applyHistory, editing]);
 
   function selectPage(index: number) {
-    if (busy || transferBusy) return;
+    if (assetBusy || transferBusy) return;
     setContentsOpen(false);
     setEditingTarget("pages");
     setOpened(true);
@@ -320,7 +363,19 @@ export function Scrapbook({
     changeElements([...editorPage.elements, element]);
     setSelectedId(element.id);
   }
-  async function upload(file: File, replace = false) {
+  function addSticker(asset: StickerAsset) {
+    if (assetBusy || editorPage.elements.length >= 60) return;
+    const element = createSticker(asset);
+    changeElements([...editorPage.elements, element]);
+    setSelectedId(element.id);
+  }
+  function changeTheme(theme: BookTheme) {
+    update((previous) => ({ ...previous, theme }));
+  }
+  function changeAudio(audio: BookAudio | undefined) {
+    update((previous) => ({ ...previous, audio }), "audio:settings");
+  }
+  async function upload(file: File, replace = false, decoration = false) {
     if (file.size > 10 * 1024 * 1024) {
       setNotice("Choose an image smaller than 10 MB.");
       return;
@@ -346,22 +401,28 @@ export function Scrapbook({
           crop: null,
         });
       else {
-        const width = 280;
+        const width = decoration ? 160 : 280;
         const height = Math.min(
           350,
-          Math.max(120, (width * result.height) / result.width + 42),
+          Math.max(
+            decoration ? 40 : 120,
+            (width * result.height) / result.width + (decoration ? 0 : 42),
+          ),
         );
         const element: BookElement = {
           id: crypto.randomUUID(),
           type: "image",
           filename: result.filename,
-          caption: "A moment worth keeping",
+          ...(decoration ? { kind: "decoration" as const } : {}),
+          caption: decoration
+            ? "A decoration to remember"
+            : "A moment worth keeping",
           x: 80,
           y: 100,
           width,
           height,
-          rotation: -2,
-          frame: "polaroid",
+          rotation: decoration ? 0 : -2,
+          frame: decoration ? "borderless" : "polaroid",
         };
         // Keep edits made while the upload was in flight, on its original target.
         update((previous) => {
@@ -473,6 +534,7 @@ export function Scrapbook({
     else reader.current?.previous();
   }
   function toggleEdit() {
+    if (presentation || assetBusy || transferBusy) return;
     setContentsOpen(false);
     if (!editing) setEditingTarget(opened ? "pages" : "cover");
     setEditing(!editing);
@@ -481,7 +543,7 @@ export function Scrapbook({
     if (editing) void save();
   }
   function editCover() {
-    if (busy || transferBusy) return;
+    if (presentation || assetBusy || transferBusy) return;
     setContentsOpen(false);
     setSelectedId(null);
     setOpened(false);
@@ -489,7 +551,7 @@ export function Scrapbook({
     setEditing(true);
   }
   function editPages() {
-    if (busy || transferBusy) return;
+    if (presentation || assetBusy || transferBusy) return;
     setSelectedId(null);
     setOpened(true);
     setEditingTarget("pages");
@@ -505,11 +567,26 @@ export function Scrapbook({
     } else if (opened && spreadStart > 0) reader.current?.navigate(0);
     else reader.current?.close();
   }
+  function enterPresentation() {
+    if (editing || assetBusy || transferBusy) return;
+    setContentsOpen(false);
+    setPresentation(true);
+  }
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      setNotice(
+        "Fullscreen is unavailable. You can still present your book in this window.",
+      );
+    }
+  }
 
   return (
     <ImageRevisionContext.Provider value={book.revision}>
       <div
-        className={`app-shell ${opened ? "book-open" : "book-closed"} ${editing ? "mode-editing" : "mode-reading"}`}
+        className={`app-shell theme-${book.theme ?? "cafe"} ${opened ? "book-open" : "book-closed"} ${editing ? "mode-editing" : "mode-reading"} ${presentation ? "mode-presentation" : ""}`}
       >
         <header className="app-header">
           <button
@@ -527,7 +604,7 @@ export function Scrapbook({
           </button>
           <div className="header-actions">
             <BookActions
-              disabled={busy || transferBusy}
+              disabled={assetBusy || transferBusy}
               onBusyChange={setTransferBusy}
               onPrepare={async () => ((await save()) ? getRevision() : null)}
             />
@@ -537,7 +614,7 @@ export function Scrapbook({
                   className="history-button"
                   aria-label="Undo"
                   title="Undo (Ctrl/Cmd+Z)"
-                  disabled={busy || transferBusy || !canUndo}
+                  disabled={assetBusy || transferBusy || !canUndo}
                   onClick={() => applyHistory("undo")}
                 >
                   <Undo2 size={16} />
@@ -546,12 +623,23 @@ export function Scrapbook({
                   className="history-button"
                   aria-label="Redo"
                   title="Redo (Ctrl/Cmd+Shift+Z)"
-                  disabled={busy || transferBusy || !canRedo}
+                  disabled={assetBusy || transferBusy || !canRedo}
                   onClick={() => applyHistory("redo")}
                 >
                   <Redo2 size={16} />
                 </button>
               </div>
+            )}
+            {!editing && (
+              <button
+                className="contents-toggle presentation-entry"
+                ref={presentationButton}
+                aria-label="Present book"
+                disabled={assetBusy || transferBusy}
+                onClick={enterPresentation}
+              >
+                <Gift size={15} /> Present
+              </button>
             )}
             {!editing && (
               <button
@@ -564,19 +652,21 @@ export function Scrapbook({
               </button>
             )}
             <span
-              className={`save-status status-${busy ? "saving" : status}`}
+              className={`save-status status-${assetBusy ? "saving" : status}`}
               role="status"
               aria-live="polite"
             >
-              {busy || status === "saving" ? (
+              {assetBusy || status === "saving" ? (
                 <LoaderCircle size={14} className="spinning" />
               ) : status === "saved" ? (
                 <Check size={14} />
               ) : (
                 <span className="status-dot" />
               )}
-              {busy
-                ? "Adding photograph…"
+              {assetBusy
+                ? audioBusy
+                  ? "Adding ambience…"
+                  : "Adding photograph…"
                 : status === "saved"
                   ? "Saved on this device"
                   : status === "saving"
@@ -598,7 +688,7 @@ export function Scrapbook({
             <button
               className={`primary-button ${editing ? "editing-toggle" : ""}`}
               aria-pressed={editing}
-              disabled={busy || transferBusy}
+              disabled={assetBusy || transferBusy}
               onClick={toggleEdit}
             >
               {editing ? <Check size={15} /> : <Pencil size={15} />}
@@ -610,6 +700,40 @@ export function Scrapbook({
             </button>
           </div>
         </header>
+        {presentation && (
+          <div
+            className="presentation-controls"
+            role="toolbar"
+            aria-label="Presentation controls"
+          >
+            <span className="presentation-label">
+              <Gift size={14} /> A book to share
+            </span>
+            <button
+              className="icon-button"
+              aria-label={fullscreen ? "Leave fullscreen" : "Enter fullscreen"}
+              onClick={() => void toggleFullscreen()}
+            >
+              {fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}
+            </button>
+            <button
+              ref={exitPresentationButton}
+              className="secondary-button"
+              onClick={exitPresentation}
+            >
+              <X size={14} /> Exit presentation
+            </button>
+          </div>
+        )}
+        <div className="ambience-dock">
+          <BookAmbience
+            audio={book.audio}
+            editing={editing}
+            disabled={busy || transferBusy}
+            onBusyChange={setAudioBusy}
+            onChange={changeAudio}
+          />
+        </div>
         <div className="workspace">
           <aside
             id="book-contents"
@@ -937,7 +1061,10 @@ export function Scrapbook({
               onEditCover={editCover}
               onEditPages={editPages}
               element={selectedElement}
-              busy={busy}
+              busy={assetBusy}
+              onAddSticker={addSticker}
+              onUploadDecoration={(file) => void upload(file, false, true)}
+              onThemeChange={changeTheme}
               onReturnToBook={() =>
                 spreadScrollRef.current?.scrollIntoView({
                   behavior: "smooth",

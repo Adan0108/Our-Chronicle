@@ -55,6 +55,22 @@ export const cropSchema = z
 export const imageNameSchema = z
   .string()
   .regex(/^[a-z0-9-]{1,80}\.(?:jpg|png|webp)$/);
+export const audioNameSchema = z
+  .string()
+  .regex(/^[a-z0-9-]{1,80}\.(?:mp3|wav|ogg)$/);
+export const themeSchema = z.enum([
+  "cafe",
+  "vintage",
+  "ivory",
+  "wedding",
+  "campus",
+]);
+export const audioSchema = z.object({
+  filename: audioNameSchema,
+  title: z.string().min(1).max(120),
+  volume: z.number().finite().min(0).max(1),
+  loop: z.boolean(),
+});
 const geometry = {
   id: z.string().min(1).max(100),
   x: z
@@ -91,10 +107,41 @@ export const elementSchema = z.discriminatedUnion("type", [
   z.object({
     ...geometry,
     type: z.literal("image"),
+    kind: z.enum(["photo", "decoration"]).optional(),
     filename: imageNameSchema.optional(),
     caption: z.string().max(200),
-    frame: z.enum(["polaroid", "plain"]),
+    frame: z.enum([
+      "polaroid",
+      "plain",
+      "soft-shadow",
+      "paper",
+      "taped",
+      "borderless",
+    ]),
     crop: cropSchema.nullable().optional(),
+  }),
+  z.object({
+    ...geometry,
+    type: z.literal("sticker"),
+    asset: z.enum([
+      "masking-tape",
+      "paper-tape",
+      "heart",
+      "star",
+      "sparkles",
+      "arrow",
+      "flower",
+      "leaf",
+      "coffee",
+      "handwritten",
+      "date-label",
+      "paper-scrap",
+    ]),
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .optional(),
+    label: z.string().max(40).optional(),
   }),
 ]);
 export const pageSchema = z.object({
@@ -116,6 +163,8 @@ export const bookSchema = z
     subtitle: z.string().max(200),
     updatedAt: z.iso.datetime(),
     cover: coverSchema.optional(),
+    theme: themeSchema.optional(),
+    audio: audioSchema.optional(),
     pages: z.array(pageSchema).min(2).max(100),
   })
   .superRefine((book, ctx) => {
@@ -149,6 +198,10 @@ export type CoverStyle = BookCover["style"];
 export type BookElement = z.infer<typeof elementSchema>;
 export type ImageElement = Extract<BookElement, { type: "image" }>;
 export type TextElement = Extract<BookElement, { type: "text" }>;
+export type StickerElement = Extract<BookElement, { type: "sticker" }>;
+export type StickerAsset = StickerElement["asset"];
+export type BookTheme = z.infer<typeof themeSchema>;
+export type BookAudio = z.infer<typeof audioSchema>;
 export type ImageCrop = z.infer<typeof cropSchema>;
 export type PageTemplate =
   "blank" | "journal" | "single-photo" | "two-photos" | "collage";

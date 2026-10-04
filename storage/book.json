@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "revision": 190,
+  "revision": 259,
   "title": "Our Chronicle",
   "subtitle": "Little moments. A life well remembered.",
-  "updatedAt": "2026-10-03T14:19:57.601Z",
+  "updatedAt": "2026-10-04T01:27:08.582Z",
   "cover": {
     "style": "rose",
     "backgroundColor": "#b18b84",
@@ -78,12 +78,24 @@
       }
     ]
   },
+  "theme": "vintage",
   "pages": [
     {
       "id": "page-1",
       "title": "The little things",
       "paper": "cream",
       "elements": [
+        {
+          "id": "8a35601e-5f86-4f3f-a82d-7ee8682e4c62",
+          "x": 0,
+          "y": 448,
+          "width": 78,
+          "height": 132,
+          "rotation": 35,
+          "type": "sticker",
+          "asset": "leaf",
+          "color": "#788365"
+        },
         {
           "id": "t1",
           "x": 38,
@@ -139,6 +151,29 @@
           "type": "text",
           "text": "Here’s to taking the scenic route.",
           "style": "handwritten"
+        },
+        {
+          "id": "72903f33-5209-42e6-8699-3f09e783f0a2",
+          "x": 324,
+          "y": 437,
+          "width": 116,
+          "height": 143,
+          "rotation": -2,
+          "type": "image",
+          "filename": "9755342c-2fc3-4bb2-90ec-c909311b83ba.webp",
+          "caption": "A moment worth keeping",
+          "frame": "polaroid"
+        },
+        {
+          "id": "90c40294-f78a-4c06-8d99-95b431728fe2",
+          "x": 353,
+          "y": 134,
+          "width": 78,
+          "height": 76,
+          "rotation": 0,
+          "type": "sticker",
+          "asset": "heart",
+          "color": "#bd8277"
         }
       ]
     },
@@ -190,19 +225,6 @@
           "type": "text",
           "text": "More memories to come…",
           "style": "handwritten"
-        },
-        {
-          "id": "e3874e3b-af2d-46b9-853e-3a1d7abc6cc9",
-          "x": 308,
-          "y": 329,
-          "width": 132,
-          "height": 124,
-          "rotation": -2,
-          "locked": true,
-          "type": "image",
-          "filename": "0177a408-6c33-40a5-a17f-0d006d2978b9.webp",
-          "caption": "A moment worth keeping",
-          "frame": "polaroid"
         },
         {
           "id": "968d202c-7a00-4765-a79d-84158d9dbe78",
@@ -441,6 +463,39 @@
             "width": 72.23855522889542,
             "height": 76.92307692307692
           }
+        }
+      ]
+    },
+    {
+      "id": "ff4c9294-a6dc-4705-8f43-3bdf47cf56b3",
+      "title": "A new memory",
+      "paper": "cream",
+      "elements": [
+        {
+          "id": "ccb2d355-30db-412b-a974-4cb6706174f0",
+          "x": 40,
+          "y": 70,
+          "width": 360,
+          "height": 70,
+          "rotation": 0,
+          "type": "text",
+          "text": "A new memory",
+          "style": "heading",
+          "fontFamily": "handwritten"
+        },
+        {
+          "id": "4c35b7aa-205a-4381-94d2-4ec26b7737f3",
+          "x": 66,
+          "y": 169,
+          "width": 280,
+          "height": 287.4022988505747,
+          "rotation": -60,
+          "locked": false,
+          "type": "image",
+          "kind": "photo",
+          "filename": "6638cb24-fd81-4626-bba2-d10ba5ec4906.webp",
+          "caption": "A moment worth keeping",
+          "frame": "taped"
         }
       ]
     }

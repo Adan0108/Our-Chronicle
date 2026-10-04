@@ -11,6 +11,8 @@ import {
 import Image from "next/image";
 import { Rnd } from "react-rnd";
 import { ImageIcon, LockKeyhole } from "lucide-react";
+import { DECORATIONS } from "@/lib/decorations";
+import { StickerArt } from "./sticker";
 import {
   type BookPage,
   type BookElement,
@@ -36,18 +38,24 @@ function Photograph({ element }: { element: ImageElement }) {
   const [intrinsic, setIntrinsic] = useState({ width: 1, height: 1 });
   const [failed, setFailed] = useState(false);
   const revision = useContext(ImageRevisionContext);
+  const decoration = element.kind === "decoration";
   if (!element.filename)
     return (
       <div className="photo-image photo-placeholder">
         <ImageIcon size={27} strokeWidth={1} aria-hidden="true" />
-        <span>A photograph to remember</span>
+        <span>
+          {decoration ? "A little decoration" : "A photograph to remember"}
+        </span>
       </div>
     );
   const crop = element.crop;
   const image = (
     <Image
       src={`/api/images/${element.filename}${failed ? `?v=${revision}` : ""}`}
-      alt={element.caption || "Scrapbook photograph"}
+      alt={
+        element.caption ||
+        (decoration ? "Scrapbook decoration" : "Scrapbook photograph")
+      }
       fill
       unoptimized
       sizes="400px"
@@ -57,7 +65,13 @@ function Photograph({ element }: { element: ImageElement }) {
         const node = event.currentTarget;
         setIntrinsic({ width: node.naturalWidth, height: node.naturalHeight });
       }}
-      style={crop ? { objectFit: "fill" } : undefined}
+      style={
+        crop
+          ? { objectFit: "fill" }
+          : decoration
+            ? { objectFit: "contain" }
+            : undefined
+      }
     />
   );
   if (!crop) return <div className="photo-image">{image}</div>;
@@ -66,10 +80,32 @@ function Photograph({ element }: { element: ImageElement }) {
   // Keep that window's natural aspect ratio, then cover the resized photo frame.
   const aspect =
     (intrinsic.width * crop.width) / (intrinsic.height * crop.height);
-  const frameWidth = element.width - (element.frame === "polaroid" ? 20 : 0);
-  const frameHeight = element.height - (element.frame === "polaroid" ? 45 : 0);
-  const width = Math.max(frameWidth, frameHeight * aspect);
-  const height = Math.max(frameHeight, frameWidth / aspect);
+  const frameWidth = Math.max(
+    1,
+    element.width -
+      (decoration
+        ? 0
+        : element.frame === "polaroid"
+          ? 20
+          : element.frame === "paper"
+            ? 24
+            : 0),
+  );
+  const frameHeight = Math.max(
+    1,
+    element.height -
+      (decoration
+        ? 0
+        : element.frame === "polaroid"
+          ? 45
+          : element.frame === "paper"
+            ? 24
+            : 0),
+  );
+  const width = decoration
+    ? Math.min(frameWidth, frameHeight * aspect)
+    : Math.max(frameWidth, frameHeight * aspect);
+  const height = width / aspect;
   return (
     <div className="photo-image" data-cropped="true">
       <div className="cropped-source" style={{ width, height }}>
@@ -117,13 +153,31 @@ function ElementContent({ element }: { element: BookElement }) {
         {element.text}
       </div>
     );
+  if (element.type === "sticker")
+    return (
+      <div
+        className="scrap-sticker"
+        role="img"
+        aria-label={element.label || DECORATIONS[element.asset].label}
+        data-sticker-asset={element.asset}
+        style={{ transform: `rotate(${element.rotation}deg)` }}
+      >
+        <StickerArt
+          asset={element.asset}
+          color={element.color}
+          label={element.label}
+        />
+      </div>
+    );
+  const decoration = element.kind === "decoration";
   return (
     <figure
-      className={`scrap-photo frame-${element.frame}`}
+      className={`scrap-photo ${decoration ? "scrap-decoration frame-borderless" : `frame-${element.frame}`}`}
+      data-image-kind={decoration ? "decoration" : "photo"}
       style={{ transform: `rotate(${element.rotation}deg)` }}
     >
       <Photograph key={element.filename} element={element} />
-      {element.frame === "polaroid" && (
+      {!decoration && element.frame === "polaroid" && (
         <figcaption>{element.caption}</figcaption>
       )}
     </figure>
@@ -161,6 +215,7 @@ export function ElementLayer({
             disableDragging={selectedId !== element.id || element.locked}
             style={{ zIndex: index + 1 }}
             data-element-id={element.id}
+            data-element-type={element.type}
             data-testid={`element-${element.id}`}
             data-locked={Boolean(element.locked)}
             className={`scrap-element editable-element ${selectedId === element.id ? "selected-element" : ""} ${element.locked ? "locked-element" : ""}`}
@@ -198,7 +253,11 @@ export function ElementLayer({
               aria-label={
                 element.type === "text"
                   ? `Edit text: ${element.text.slice(0, 45)}`
-                  : `Select image: ${element.caption || "photograph"}`
+                  : element.type === "sticker"
+                    ? `Select sticker: ${DECORATIONS[element.asset].label}`
+                    : element.kind === "decoration"
+                      ? `Select decoration: ${element.caption || "uploaded asset"}`
+                      : `Select image: ${element.caption || "photograph"}`
               }
               onClick={(event) => {
                 event.stopPropagation();
@@ -222,8 +281,9 @@ export function ElementLayer({
         ) : (
           <div
             key={element.id}
-            className="scrap-element"
+            className="scrap-element reading-element"
             data-element-id={element.id}
+            data-element-type={element.type}
             data-testid={`element-${element.id}`}
             style={{
               left: element.x,

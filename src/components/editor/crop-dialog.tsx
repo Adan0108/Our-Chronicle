@@ -17,10 +17,25 @@ export function CropDialog({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [crop, setCrop] = useState<ImageCrop | null>(null);
+  const decoration = element.kind === "decoration";
   const photoWidth =
-    element.frame === "polaroid" ? element.width - 20 : element.width;
+    element.width -
+    (decoration
+      ? 0
+      : element.frame === "polaroid"
+        ? 20
+        : element.frame === "paper"
+          ? 24
+          : 0);
   const photoHeight =
-    element.frame === "polaroid" ? element.height - 45 : element.height;
+    element.height -
+    (decoration
+      ? 0
+      : element.frame === "polaroid"
+        ? 45
+        : element.frame === "paper"
+          ? 24
+          : 0);
   const aspect = Math.max(1, photoWidth) / Math.max(1, photoHeight);
 
   const openDialog = useCallback((dialog: HTMLDialogElement | null) => {
@@ -53,16 +68,20 @@ export function CropDialog({
         if (event.target === event.currentTarget) cancel();
       }}
     >
-      <h2 id="crop-dialog-title">Frame your photograph</h2>
+      <h2 id="crop-dialog-title">
+        {decoration ? "Crop your decoration" : "Frame your photograph"}
+      </h2>
       <p className="field-hint" id="crop-instructions">
         Drag to choose the moment you want to keep. Zoom for a closer look. Your
-        original photo stays intact. You can also use arrow keys in the crop
-        frame.
+        original {decoration ? "asset" : "photo"} stays intact. You can also use
+        arrow keys in the crop frame.
       </p>
       <div
-        className="crop-stage"
+        className={`crop-stage ${decoration ? "decoration-crop-stage" : ""}`}
         role="group"
-        aria-label="Photo crop preview"
+        aria-label={
+          decoration ? "Decoration crop preview" : "Photo crop preview"
+        }
         aria-describedby="crop-instructions"
       >
         {ready && (

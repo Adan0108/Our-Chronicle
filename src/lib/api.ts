@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import { StorageError } from "./storage";
+import { isStorageError, StorageError } from "./storage/errors";
 export function checkOrigin(request: Request) {
   const origin = request.headers.get("origin");
   // Next may normalize request.url to localhost; Host retains the browser's actual origin.
@@ -26,7 +26,7 @@ export async function limitedBody(request: Request, max: number) {
   return Buffer.concat(chunks);
 }
 export function apiError(error: unknown) {
-  if (error instanceof StorageError)
+  if (isStorageError(error))
     return Response.json({ error: error.message }, { status: error.status });
   if (error instanceof ZodError || error instanceof SyntaxError)
     return Response.json(

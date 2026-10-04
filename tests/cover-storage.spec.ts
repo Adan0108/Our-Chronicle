@@ -397,7 +397,7 @@ test("legacy archives remain version 1 and invalid cover format versions do not 
     ).rejects.toThrow("Customized covers require a version 2");
     await expect(
       storage.importBook(
-        await archiveWithVersion(custom, decoded.images, 3),
+        await archiveWithVersion(custom, decoded.images, 4),
         initial.revision,
       ),
     ).rejects.toThrow("format version is not supported");
