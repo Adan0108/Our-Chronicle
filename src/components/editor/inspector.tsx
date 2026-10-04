@@ -13,7 +13,6 @@ import {
   Crop,
   Lock,
   LockOpen,
-  Layers,
   Bold,
   Italic,
   LayoutTemplate,
@@ -36,6 +35,7 @@ import { THEMES } from "@/lib/themes";
 import { CropDialog } from "./crop-dialog";
 import { TemplateDialog } from "./template-dialog";
 import { DecorationDialog } from "./decoration-dialog";
+import { LayersPanel } from "./layers-panel";
 
 type Props = {
   book: Book;
@@ -45,7 +45,9 @@ type Props = {
   onBookChange: (changes: Partial<Book>) => void;
   onPageChange: (changes: Partial<BookPage>) => void;
   onElementChange: (changes: Partial<BookElement>) => void;
-  onSelectElement: (id: string) => void;
+  selectedIds?: string[];
+  onSelectElement: (id: string, additive?: boolean) => void;
+  onReorderElements?: (ids: string[]) => void;
   onAddText: () => void;
   onUpload: (file: File, replace?: boolean) => void;
   onDeleteElement: () => void;
@@ -65,35 +67,20 @@ type Props = {
   onThemeChange?: (theme: BookTheme) => void;
 };
 
-function layerLabel(element: BookElement) {
-  const name =
-    element.type === "text"
-      ? element.text
-      : element.type === "image"
-        ? element.caption
-        : element.label || DECORATIONS[element.asset].label;
-  return (
-    name.replace(/\s+/g, " ").trim().slice(0, 45) ||
-    (element.type === "image"
-      ? element.kind === "decoration"
-        ? "Untitled decoration"
-        : "Untitled photo"
-      : "Empty text")
-  );
-}
-
-function NumberField({
+export function NumberField({
   label,
   value,
   min,
   max,
   onChange,
+  disabled,
 }: {
   label: string;
   value: number;
   min: number;
   max: number;
   onChange: (value: number) => void;
+  disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -106,6 +93,7 @@ function NumberField({
       aria-label={label}
       min={min}
       max={max}
+      disabled={disabled}
       defaultValue={value}
       onChange={(event) => {
         const next = event.target.valueAsNumber;
@@ -132,6 +120,8 @@ export function Inspector({
   onPageChange,
   onElementChange,
   onSelectElement,
+  selectedIds,
+  onReorderElements,
   onAddText,
   onUpload,
   onDeleteElement,
@@ -614,44 +604,14 @@ export function Inspector({
           </button>
         </section>
       )}
-      <details className="inspector-section layers-section" open>
-        <summary>
-          <Layers size={14} /> Layers <span>{elements.length}</span>
-        </summary>
-        <p className="field-hint">
-          Frontmost first. Select a layer even when it is covered or locked.
-        </p>
-        <div className="layer-list">
-          {[...elements].reverse().map((item, index) => (
-            <button
-              key={item.id}
-              className={`layer-button ${item.id === element?.id ? "selected" : ""}`}
-              aria-label={`Select layer: ${layerLabel(item)} (layer ${elements.length - index})`}
-              aria-pressed={item.id === element?.id}
-              data-testid={`layer-${item.id}`}
-              onClick={() => onSelectElement(item.id)}
-            >
-              {item.type === "image" ? (
-                <ImagePlus size={13} />
-              ) : item.type === "sticker" ? (
-                <Sparkles size={13} />
-              ) : (
-                <Type size={13} />
-              )}
-              <span>{layerLabel(item)}</span>
-              {item.locked && <Lock size={12} aria-label="Position locked" />}
-              <span className="layer-number">{elements.length - index}</span>
-            </button>
-          ))}
-          {!elements.length && (
-            <p className="field-hint">
-              {cover
-                ? "Your cover is a fresh start."
-                : "This page is a fresh start."}
-            </p>
-          )}
-        </div>
-      </details>
+      <LayersPanel
+        elements={elements}
+        selectedIds={selectedIds ?? (element ? [element.id] : [])}
+        busy={busy}
+        cover={!!cover}
+        onSelect={onSelectElement}
+        onReorder={onReorderElements}
+      />
       {onThemeChange && (
         <details className="inspector-section theme-settings">
           <summary>

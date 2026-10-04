@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useRef, type CSSProperties } from "react";
+import { forwardRef, type CSSProperties } from "react";
 import { Leaf } from "lucide-react";
 import {
   PAGE_HEIGHT,
@@ -10,7 +10,7 @@ import {
   type BookElement,
 } from "@/types/book";
 import { resolveCover } from "@/lib/cover";
-import { ElementLayer } from "./page-renderer";
+import { CanvasHints, ElementLayer, useCanvasSurface } from "./page-renderer";
 
 type Props = {
   book: Book;
@@ -58,31 +58,31 @@ export function EditableCover({
   onChange: (id: string, changes: Partial<BookElement>) => void;
 }) {
   const cover = resolveCover(book);
-  const backgroundPointer = useRef(false);
+  const canvas = useCanvasSurface("front-cover", true, onSelect);
   return (
     <div
-      className={`book-cover editable-cover cover-style-${cover.style}`}
+      className={`book-cover editable-cover cover-style-${cover.style} ${canvas.dropActive ? "canvas-drop-active" : ""}`}
       style={{ width: PAGE_WIDTH, height: PAGE_HEIGHT }}
       data-testid="cover-editor-surface"
+      data-editor-surface="front-cover"
       role="region"
       aria-label="Cover editing canvas"
-      onPointerDown={(event) => {
-        backgroundPointer.current = event.target === event.currentTarget;
-      }}
-      onClick={(event) => {
-        if (backgroundPointer.current && event.target === event.currentTarget)
-          onSelect(null);
-        backgroundPointer.current = false;
-      }}
+      {...canvas.handlers}
     >
       <CoverFace cover={cover} />
       <CoverDecoration />
       <ElementLayer
         elements={cover.elements}
+        surfaceId="front-cover"
         editing
         selectedId={selectedId}
         onSelect={onSelect}
         onChange={onChange}
+      />
+      <CanvasHints
+        surfaceId="front-cover"
+        elements={cover.elements}
+        dropActive={canvas.dropActive}
       />
     </div>
   );

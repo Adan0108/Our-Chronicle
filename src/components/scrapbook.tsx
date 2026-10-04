@@ -31,6 +31,8 @@ import {
   type StickerAsset,
   type BookAudio,
   type BookTheme,
+  PAGE_WIDTH,
+  PAGE_HEIGHT,
 } from "@/types/book";
 import {
   createPageFromTemplate,
@@ -46,6 +48,18 @@ import { DeletePageDialog } from "./editor/delete-page-dialog";
 import { BookActions } from "./book/book-actions";
 import { BookAmbience } from "./book/ambience";
 import { createSticker } from "@/lib/decorations";
+import {
+  CanvasEditorContext,
+  type CanvasPoint,
+  type ElementPosition,
+} from "./editor/editor-context";
+import { ImageImportDialog } from "./editor/image-import-dialog";
+import { DecorationDialog } from "./editor/decoration-dialog";
+import { QuickTools } from "./editor/quick-tools";
+
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const INPUT_TARGETS =
+  "input, textarea, select, [contenteditable], dialog[open], [role='dialog'], [role='menu'], [role='slider'], [role='combobox'], [data-editor-shortcuts='ignore']";
 
 export function Scrapbook({
   initialBook,
@@ -73,7 +87,22 @@ export function Scrapbook({
   );
   const [spread, setSpread] = useState(0);
   const [activePageId, setActivePageId] = useState(book.pages[0].id);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectedId = selectedIds.at(-1) ?? null;
+  const [contextPoint, setContextPoint] = useState<CanvasPoint | null>(null);
+  const setSelectedId = useCallback((id: string | null) => {
+    setSelectedIds(id ? [id] : []);
+    setContextPoint(null);
+  }, []);
+  const [imageImport, setImageImport] = useState<{
+    files: File[];
+    surfaceId: string;
+    point: CanvasPoint;
+  } | null>(null);
+  const [decorationSurface, setDecorationSurface] = useState<string | null>(
+    null,
+  );
+  const uploading = useRef(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(initialNotice);
   const [transferBusy, setTransferBusy] = useState(false);
@@ -181,6 +210,10 @@ export function Scrapbook({
   const selectedElement = editorPage.elements.find(
     (element) => element.id === selectedId,
   );
+  const selectedElements = editorPage.elements.filter((element) =>
+    selectedIds.includes(element.id),
+  );
+  const activeSurfaceId = coverEditing ? "front-cover" : activePage.id;
   const spreadStart = Math.min(
     Math.floor(spread / 2) * 2,
     Math.floor((book.pages.length - 1) / 2) * 2,
@@ -192,15 +225,17 @@ export function Scrapbook({
       if (!restored) return;
       if (coverEditing) {
         const elements = resolveCover(restored).elements;
-        const added = elements.find(
+        const added = elements.filter(
           (element) =>
             !cover.elements.some((current) => current.id === element.id),
         );
-        setSelectedId(
-          elements.some((element) => element.id === selectedId)
-            ? selectedId
-            : (added?.id ?? null),
+        const retained = selectedIds.filter((id) =>
+          elements.some((element) => element.id === id),
         );
+        setSelectedIds(
+          retained.length ? retained : added.map((element) => element.id),
+        );
+        setContextPoint(null);
         return;
       }
       const restoredPage = restored.pages.find(
@@ -218,21 +253,25 @@ export function Scrapbook({
       const page = restored.pages[index];
       setActivePageId(page.id);
       setSpread(Math.floor(index / 2) * 2);
-      const restoredElement =
+      const restoredElements =
         !restoredPage &&
-        page.elements.find(
+        page.elements.filter(
           (element) =>
             !book.pages.some((current) =>
               current.elements.some((item) => item.id === element.id),
             ),
         );
-      setSelectedId(
-        page.elements.some((element) => element.id === selectedId)
-          ? selectedId
-          : restoredElement
-            ? restoredElement.id
-            : null,
+      const retained = selectedIds.filter((id) =>
+        page.elements.some((element) => element.id === id),
       );
+      setSelectedIds(
+        retained.length
+          ? retained
+          : restoredElements
+            ? restoredElements.map((element) => element.id)
+            : [],
+      );
+      setContextPoint(null);
     },
     [
       activePageId,
@@ -242,7 +281,7 @@ export function Scrapbook({
       coverEditing,
       cover.elements,
       redo,
-      selectedId,
+      selectedIds,
       undo,
     ],
   );
@@ -251,21 +290,84 @@ export function Scrapbook({
     const handler = (event: KeyboardEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       if (
-        !(event.ctrlKey || event.metaKey) ||
-        target?.closest(
-          "input, textarea, select, [contenteditable='true'], dialog[open]",
+        event.defaultPrevented ||
+        target?.closest(INPUT_TARGETS) ||
+        document.querySelector(
+          "dialog[open], :popover-open, .layers-section .layer-row.sorting",
         )
       )
         return;
       const key = event.key.toLowerCase();
-      if (key === "z" || key === "y") {
+      const command = event.ctrlKey || event.metaKey;
+      if (command && (key === "z" || key === "y")) {
         event.preventDefault();
         applyHistory(key === "y" || event.shiftKey ? "redo" : "undo");
+      } else if (key === "escape") {
+        event.preventDefault();
+        if (contextPoint) setContextPoint(null);
+        else setSelectedId(null);
+      } else if (!assetBusy && !transferBusy && selectedElements.length) {
+        if (command && key === "d") {
+          event.preventDefault();
+          copyElement();
+        } else if (!command && (key === "delete" || key === "backspace")) {
+          event.preventDefault();
+          removeElements();
+        } else if (event.altKey && (key === "arrowup" || key === "arrowdown")) {
+          event.preventDefault();
+          layerElement(key === "arrowup" ? "forward" : "backward");
+        }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [applyHistory, editing]);
+  });
+
+  useEffect(() => {
+    if (!editing) return;
+    const paste = (event: ClipboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        assetBusy ||
+        transferBusy ||
+        imageImport ||
+        target?.closest(INPUT_TARGETS) ||
+        document.querySelector("dialog[open], :popover-open")
+      )
+        return;
+      const files = Array.from(event.clipboardData?.items ?? [])
+        .filter(
+          (item) => item.kind === "file" && item.type.startsWith("image/"),
+        )
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => Boolean(file));
+      if (!files.length) return;
+      event.preventDefault();
+      queueImages(activeSurfaceId, files, {
+        x: PAGE_WIDTH / 2,
+        y: PAGE_HEIGHT / 2,
+      });
+    };
+    window.addEventListener("paste", paste);
+    return () => window.removeEventListener("paste", paste);
+  });
+
+  useEffect(() => {
+    if (!editing || !selectedIds.length) return;
+    const outside = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        !target?.closest(".main-workspace") ||
+        target.closest(
+          ".editable-element, button, input, textarea, select, dialog",
+        )
+      )
+        return;
+      setSelectedId(null);
+    };
+    window.addEventListener("pointerdown", outside);
+    return () => window.removeEventListener("pointerdown", outside);
+  }, [editing, selectedIds.length, setSelectedId]);
 
   function selectPage(index: number) {
     if (assetBusy || transferBusy) return;
@@ -305,9 +407,101 @@ export function Scrapbook({
         : undefined,
     );
   }
-  function changeElements(elements: BookElement[]) {
-    if (coverEditing) changeCover({ elements });
-    else changePage(activePage.id, { elements });
+  function updateSurface(
+    surfaceId: string,
+    transform: (elements: BookElement[]) => BookElement[],
+  ) {
+    update((previous) =>
+      surfaceId === "front-cover"
+        ? {
+            ...previous,
+            cover: {
+              ...resolveCover(previous),
+              elements: transform(resolveCover(previous).elements),
+            },
+          }
+        : {
+            ...previous,
+            pages: previous.pages.map((page) =>
+              page.id === surfaceId
+                ? { ...page, elements: transform(page.elements) }
+                : page,
+            ),
+          },
+    );
+  }
+  function selectSurface(
+    surfaceId: string,
+    id: string | null,
+    additive = false,
+  ) {
+    if (!editing) return;
+    if (surfaceId !== "front-cover") setActivePageId(surfaceId);
+    setSelectedIds((previous) => {
+      if (!id) return [];
+      if (!additive || surfaceId !== activeSurfaceId) return [id];
+      return previous.includes(id)
+        ? previous.filter((item) => item !== id)
+        : [...previous, id];
+    });
+    setContextPoint(null);
+  }
+  function moveElements(surfaceId: string, positions: ElementPosition[]) {
+    if (assetBusy || transferBusy) return;
+    const changes = new Map(
+      positions.map((position) => [position.id, position]),
+    );
+    updateSurface(surfaceId, (elements) =>
+      elements.map((element) => {
+        const position = changes.get(element.id);
+        return !position || element.locked
+          ? element
+          : {
+              ...element,
+              x: Math.max(0, Math.min(PAGE_WIDTH - element.width, position.x)),
+              y: Math.max(
+                0,
+                Math.min(PAGE_HEIGHT - element.height, position.y),
+              ),
+            };
+      }),
+    );
+  }
+  function openContextMenu(surfaceId: string, id: string, point: CanvasPoint) {
+    if (assetBusy || transferBusy) return;
+    if (surfaceId !== activeSurfaceId || !selectedIds.includes(id))
+      selectSurface(surfaceId, id);
+    setContextPoint(point);
+  }
+  function reorderElements(frontmostIds: string[]) {
+    if (assetBusy || transferBusy) return;
+    updateSurface(activeSurfaceId, (elements) => {
+      const byId = new Map(elements.map((element) => [element.id, element]));
+      if (
+        frontmostIds.length !== elements.length ||
+        new Set(frontmostIds).size !== elements.length ||
+        frontmostIds.some((id) => !byId.has(id))
+      )
+        return elements;
+      return [...frontmostIds].reverse().map((id) => byId.get(id)!);
+    });
+  }
+  function removeElements() {
+    if (assetBusy || transferBusy || !selectedElements.length) return;
+    const ids = new Set(selectedIds);
+    updateSurface(activeSurfaceId, (elements) =>
+      elements.filter((element) => !ids.has(element.id)),
+    );
+    setSelectedId(null);
+  }
+  function lockElements(locked: boolean) {
+    if (assetBusy || transferBusy) return;
+    const ids = new Set(selectedIds);
+    updateSurface(activeSurfaceId, (elements) =>
+      elements.map((element) =>
+        ids.has(element.id) ? { ...element, locked } : element,
+      ),
+    );
   }
   function changeElement(
     pageId: string,
@@ -346,8 +540,13 @@ export function Scrapbook({
         : undefined,
     );
   }
-  function addText() {
-    if (editorPage.elements.length >= 60) return;
+  function addText(surfaceId = activeSurfaceId) {
+    if (assetBusy || transferBusy) return;
+    const surfaceElements =
+      surfaceId === "front-cover"
+        ? cover.elements
+        : book.pages.find((page) => page.id === surfaceId)?.elements;
+    if (!surfaceElements || surfaceElements.length >= 60) return;
     const element: BookElement = {
       id: crypto.randomUUID(),
       type: "text",
@@ -360,13 +559,25 @@ export function Scrapbook({
       style: "body",
       ...(coverEditing ? { color: COVER_STYLES[cover.style].textColor } : {}),
     };
-    changeElements([...editorPage.elements, element]);
+    updateSurface(surfaceId, (elements) => [...elements, element]);
+    if (surfaceId !== "front-cover") setActivePageId(surfaceId);
     setSelectedId(element.id);
   }
-  function addSticker(asset: StickerAsset) {
-    if (assetBusy || editorPage.elements.length >= 60) return;
+  function addSticker(asset: StickerAsset, surfaceId = activeSurfaceId) {
+    const surfaceElements =
+      surfaceId === "front-cover"
+        ? cover.elements
+        : book.pages.find((page) => page.id === surfaceId)?.elements;
+    if (
+      assetBusy ||
+      transferBusy ||
+      !surfaceElements ||
+      surfaceElements.length >= 60
+    )
+      return;
     const element = createSticker(asset);
-    changeElements([...editorPage.elements, element]);
+    updateSurface(surfaceId, (elements) => [...elements, element]);
+    if (surfaceId !== "front-cover") setActivePageId(surfaceId);
     setSelectedId(element.id);
   }
   function changeTheme(theme: BookTheme) {
@@ -376,14 +587,16 @@ export function Scrapbook({
     update((previous) => ({ ...previous, audio }), "audio:settings");
   }
   async function upload(file: File, replace = false, decoration = false) {
+    if (assetBusy || transferBusy || uploading.current) return;
     if (file.size > 10 * 1024 * 1024) {
       setNotice("Choose an image smaller than 10 MB.");
       return;
     }
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    if (!IMAGE_TYPES.includes(file.type)) {
       setNotice("Choose a JPEG, PNG, or WebP image.");
       return;
     }
+    uploading.current = true;
     setBusy(true);
     setNotice("");
     try {
@@ -414,9 +627,14 @@ export function Scrapbook({
           type: "image",
           filename: result.filename,
           ...(decoration ? { kind: "decoration" as const } : {}),
-          caption: decoration
-            ? "A decoration to remember"
-            : "A moment worth keeping",
+          caption:
+            file.name
+              .replace(/\.(?:jpe?g|png|webp)$/i, "")
+              .trim()
+              .slice(0, 200) ||
+            (decoration
+              ? "A decoration to remember"
+              : "A moment worth keeping"),
           x: 80,
           y: 100,
           width,
@@ -453,6 +671,119 @@ export function Scrapbook({
         err instanceof Error ? err.message : "Could not upload this image.",
       );
     } finally {
+      uploading.current = false;
+      setBusy(false);
+    }
+  }
+  function queueImages(surfaceId: string, files: File[], point: CanvasPoint) {
+    if (
+      !editing ||
+      assetBusy ||
+      transferBusy ||
+      uploading.current ||
+      imageImport
+    )
+      return;
+    const supported = files.filter(
+      (file) =>
+        IMAGE_TYPES.includes(file.type) &&
+        file.size > 0 &&
+        file.size <= 10 * 1024 * 1024,
+    );
+    if (!supported.length) {
+      setNotice(
+        "Choose a non-empty JPEG, PNG, or WebP image smaller than 10 MB.",
+      );
+      return;
+    }
+    const elements =
+      surfaceId === "front-cover"
+        ? cover.elements
+        : book.pages.find((page) => page.id === surfaceId)?.elements;
+    if (!elements || elements.length + supported.length > 60) {
+      setNotice(
+        "This page can hold up to 60 elements. Make room before adding these images.",
+      );
+      return;
+    }
+    if (surfaceId !== "front-cover") setActivePageId(surfaceId);
+    setContextPoint(null);
+    setImageImport({ surfaceId, files: supported, point });
+    setNotice(
+      supported.length < files.length
+        ? "Unsupported or oversized files were skipped. Choose JPEG, PNG, or WebP under 10 MB."
+        : "",
+    );
+  }
+  async function importImages(decoration: boolean) {
+    const pending = imageImport;
+    if (!pending || uploading.current) return;
+    setImageImport(null);
+    uploading.current = true;
+    setBusy(true);
+    const added: BookElement[] = [];
+    const failures: string[] = [];
+    try {
+      for (const [index, file] of pending.files.entries()) {
+        try {
+          const form = new FormData();
+          form.append("image", file);
+          const response = await fetch("/api/images", {
+            method: "POST",
+            body: form,
+          });
+          const result = await response.json();
+          if (!response.ok)
+            throw new Error(result.error || "Could not upload this image.");
+          const width = decoration ? 140 : 220;
+          const height = Math.min(
+            300,
+            Math.max(
+              decoration ? 40 : 100,
+              (width * result.height) / result.width + (decoration ? 0 : 42),
+            ),
+          );
+          const dx = (pending.point.x > PAGE_WIDTH / 2 ? -1 : 1) * index * 18;
+          const dy = (pending.point.y > PAGE_HEIGHT / 2 ? -1 : 1) * index * 18;
+          added.push({
+            id: crypto.randomUUID(),
+            type: "image",
+            filename: result.filename,
+            ...(decoration ? { kind: "decoration" as const } : {}),
+            caption:
+              file.name
+                .replace(/\.(?:jpe?g|png|webp)$/i, "")
+                .trim()
+                .slice(0, 200) ||
+              (decoration ? "Clipboard decoration" : "Clipboard photo"),
+            x: Math.max(
+              0,
+              Math.min(PAGE_WIDTH - width, pending.point.x - width / 2 + dx),
+            ),
+            y: Math.max(
+              0,
+              Math.min(PAGE_HEIGHT - height, pending.point.y - height / 2 + dy),
+            ),
+            width,
+            height,
+            rotation: 0,
+            frame: decoration ? "borderless" : "polaroid",
+          });
+        } catch (cause) {
+          failures.push(
+            `${file.name}: ${cause instanceof Error ? cause.message : "Could not upload this image."}`,
+          );
+        }
+      }
+      if (added.length) {
+        // Commit the whole batch once, preserving intervening edits on its original surface.
+        updateSurface(pending.surfaceId, (elements) => [...elements, ...added]);
+        setSelectedIds(added.map((element) => element.id));
+        await save();
+      }
+      if (failures.length) setNotice(failures.join(" "));
+    } finally {
+      uploading.current = false;
       setBusy(false);
     }
   }
@@ -465,21 +796,64 @@ export function Scrapbook({
     setSpread(Math.floor(book.pages.length / 2) * 2);
   }
   function copyElement() {
-    if (!selectedElement || editorPage.elements.length >= 60) return;
-    const copy = duplicateElement(selectedElement);
-    changeElements([...editorPage.elements, copy]);
-    setSelectedId(copy.id);
-  }
-  function layerElement(direction: "forward" | "backward") {
-    if (!selectedElement) return;
-    const index = editorPage.elements.findIndex(
-      (element) => element.id === selectedId,
+    if (assetBusy || transferBusy || !selectedElements.length) return;
+    if (editorPage.elements.length + selectedElements.length > 60) {
+      setNotice(
+        "This page can hold up to 60 elements. Make room before duplicating.",
+      );
+      return;
+    }
+    const dx = Math.min(
+      14,
+      PAGE_WIDTH -
+        Math.max(
+          ...selectedElements.map((element) => element.x + element.width),
+        ),
     );
-    const next = index + (direction === "forward" ? 1 : -1);
-    if (next < 0 || next >= editorPage.elements.length) return;
-    const elements = [...editorPage.elements];
-    [elements[index], elements[next]] = [elements[next], elements[index]];
-    changeElements(elements);
+    const dy = Math.min(
+      14,
+      PAGE_HEIGHT -
+        Math.max(
+          ...selectedElements.map((element) => element.y + element.height),
+        ),
+    );
+    const copies = selectedElements.map((element) => ({
+      ...duplicateElement(element, false),
+      x: element.x + dx,
+      y: element.y + dy,
+      locked: false,
+    }));
+    updateSurface(activeSurfaceId, (elements) => [...elements, ...copies]);
+    setSelectedIds(copies.map((element) => element.id));
+    setContextPoint(null);
+  }
+  function layerElement(direction: "forward" | "backward" | "front" | "back") {
+    if (assetBusy || transferBusy || !selectedElements.length) return;
+    const ids = new Set(selectedIds);
+    updateSurface(activeSurfaceId, (current) => {
+      if (direction === "front")
+        return [
+          ...current.filter((element) => !ids.has(element.id)),
+          ...current.filter((element) => ids.has(element.id)),
+        ];
+      if (direction === "back")
+        return [
+          ...current.filter((element) => ids.has(element.id)),
+          ...current.filter((element) => !ids.has(element.id)),
+        ];
+      const elements = [...current];
+      const forward = direction === "forward";
+      for (
+        let index = forward ? elements.length - 2 : 1;
+        forward ? index >= 0 : index < elements.length;
+        index += forward ? -1 : 1
+      ) {
+        const next = index + (forward ? 1 : -1);
+        if (ids.has(elements[index].id) && !ids.has(elements[next].id))
+          [elements[index], elements[next]] = [elements[next], elements[index]];
+      }
+      return elements;
+    });
   }
   function copyPage() {
     if (book.pages.length >= 100) return;
@@ -519,6 +893,7 @@ export function Scrapbook({
     setDeletePage(false);
   }
   function navigate(direction: number) {
+    if (assetBusy || transferBusy) return;
     setSelectedId(null);
     if (editing) {
       const next = Math.max(
@@ -557,6 +932,7 @@ export function Scrapbook({
     setEditingTarget("pages");
   }
   function returnToBeginning() {
+    if (assetBusy || transferBusy) return;
     setContentsOpen(false);
     setSelectedId(null);
     if (editing) {
@@ -583,6 +959,23 @@ export function Scrapbook({
     }
   }
 
+  const canvasEditor = editing
+    ? {
+        selectedIds,
+        activeSurfaceId,
+        disabled: assetBusy || transferBusy,
+        select: selectSurface,
+        move: moveElements,
+        contextMenu: openContextMenu,
+        dropFiles: queueImages,
+        addText,
+        addDecoration: (surfaceId = activeSurfaceId) => {
+          if (assetBusy || transferBusy) return;
+          if (surfaceId !== "front-cover") setActivePageId(surfaceId);
+          setDecorationSurface(surfaceId);
+        },
+      }
+    : null;
   return (
     <ImageRevisionContext.Provider value={book.revision}>
       <div
@@ -591,6 +984,7 @@ export function Scrapbook({
         <header className="app-header">
           <button
             className="brand"
+            disabled={assetBusy || transferBusy}
             onClick={returnToBeginning}
             aria-label="Our Chronicle home"
           >
@@ -654,6 +1048,7 @@ export function Scrapbook({
             <span
               className={`save-status status-${assetBusy ? "saving" : status}`}
               role="status"
+              aria-label="Book save status"
               aria-live="polite"
             >
               {assetBusy || status === "saving" ? (
@@ -846,64 +1241,66 @@ export function Scrapbook({
                 aria-label="Book spread"
               >
                 <div className="book-spread">
-                  {coverEditing ? (
-                    <EditableCover
-                      book={book}
-                      selectedId={selectedId}
-                      onSelect={setSelectedId}
-                      onChange={(id, changes) =>
-                        changeElement(editorPage.id, id, changes)
-                      }
-                    />
-                  ) : editing ? (
-                    <div className="editing-spread">
-                      {book.pages
-                        .slice(spreadStart, spreadStart + 2)
-                        .map((page, offset) => (
-                          <PageRenderer
-                            key={page.id}
-                            page={page}
-                            number={spreadStart + offset + 1}
-                            editing
-                            selectedId={selectedId}
-                            active={activePage.id === page.id}
-                            onSelect={(id) => {
-                              setActivePageId(page.id);
-                              setSelectedId(id);
-                            }}
-                            onChange={(id, changes) =>
-                              changeElement(page.id, id, changes)
-                            }
-                          />
-                        ))}
-                      {book.pages.length % 2 === 1 &&
-                        spreadStart === book.pages.length - 1 && (
-                          <div className="book-page blank-page">
-                            <Leaf size={25} />
-                            <span>Room for another memory.</span>
-                          </div>
-                        )}
-                    </div>
-                  ) : (
-                    <Reader
-                      key={needsPan ? "scrolling-reader" : "flipping-reader"}
-                      book={book}
-                      allowPageGestures={!needsPan}
-                      startPage={opened ? spreadStart : -1}
-                      closed={!opened}
-                      onFlip={(page) => {
-                        setOpened(page >= 0);
-                        setSpread(Math.max(0, page));
-                        setActivePageId(
-                          book.pages[page]?.id || book.pages[0].id,
-                        );
-                      }}
-                      controlsRef={reader}
-                    />
-                  )}
-                  {opened && (
-                    <div className="book-binding" aria-hidden="true" />
-                  )}
+                  <CanvasEditorContext.Provider value={canvasEditor}>
+                    {coverEditing ? (
+                      <EditableCover
+                        book={book}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        onChange={(id, changes) =>
+                          changeElement(editorPage.id, id, changes)
+                        }
+                      />
+                    ) : editing ? (
+                      <div className="editing-spread">
+                        {book.pages
+                          .slice(spreadStart, spreadStart + 2)
+                          .map((page, offset) => (
+                            <PageRenderer
+                              key={page.id}
+                              page={page}
+                              number={spreadStart + offset + 1}
+                              editing
+                              selectedId={selectedId}
+                              active={activePage.id === page.id}
+                              onSelect={(id) => {
+                                setActivePageId(page.id);
+                                setSelectedId(id);
+                              }}
+                              onChange={(id, changes) =>
+                                changeElement(page.id, id, changes)
+                              }
+                            />
+                          ))}
+                        {book.pages.length % 2 === 1 &&
+                          spreadStart === book.pages.length - 1 && (
+                            <div className="book-page blank-page">
+                              <Leaf size={25} />
+                              <span>Room for another memory.</span>
+                            </div>
+                          )}
+                      </div>
+                    ) : (
+                      <Reader
+                        key={needsPan ? "scrolling-reader" : "flipping-reader"}
+                        book={book}
+                        allowPageGestures={!needsPan}
+                        startPage={opened ? spreadStart : -1}
+                        closed={!opened}
+                        onFlip={(page) => {
+                          setOpened(page >= 0);
+                          setSpread(Math.max(0, page));
+                          setActivePageId(
+                            book.pages[page]?.id || book.pages[0].id,
+                          );
+                        }}
+                        controlsRef={reader}
+                      />
+                    )}
+                    {opened && (
+                      <div className="book-binding" aria-hidden="true" />
+                    )}
+                  </CanvasEditorContext.Provider>
                 </div>
               </div>
               {opened && needsPan && (
@@ -955,7 +1352,11 @@ export function Scrapbook({
                           ? "Close book"
                           : "Previous pages"
                       }
-                      disabled={editing && spreadStart === 0}
+                      disabled={
+                        assetBusy ||
+                        transferBusy ||
+                        (editing && spreadStart === 0)
+                      }
                       onClick={() =>
                         !editing && spreadStart === 0
                           ? reader.current?.close()
@@ -979,7 +1380,11 @@ export function Scrapbook({
                     <button
                       className="round-button"
                       aria-label="Next pages"
-                      disabled={spreadStart + 2 >= book.pages.length}
+                      disabled={
+                        assetBusy ||
+                        transferBusy ||
+                        spreadStart + 2 >= book.pages.length
+                      }
                       onClick={() => navigate(1)}
                     >
                       <ChevronRight size={19} />
@@ -1061,6 +1466,8 @@ export function Scrapbook({
               onEditCover={editCover}
               onEditPages={editPages}
               element={selectedElement}
+              selectedIds={selectedIds}
+              onReorderElements={reorderElements}
               busy={assetBusy}
               onAddSticker={addSticker}
               onUploadDecoration={(file) => void upload(file, false, true)}
@@ -1081,26 +1488,60 @@ export function Scrapbook({
               onElementChange={(changes) =>
                 selectedId && changeElement(activePage.id, selectedId, changes)
               }
-              onAddText={addText}
+              onAddText={() => addText()}
               onDuplicateElement={copyElement}
               onLayerElement={layerElement}
-              onSelectElement={(id) => setSelectedId(id)}
+              onSelectElement={(id, additive) =>
+                selectSurface(activeSurfaceId, id, additive)
+              }
               onDuplicatePage={copyPage}
               onMovePage={movePage}
               onUpload={upload}
-              onDeleteElement={() => {
-                changeElements(
-                  editorPage.elements.filter(
-                    (element) => element.id !== selectedId,
-                  ),
-                );
-                setSelectedId(null);
-              }}
+              onDeleteElement={removeElements}
               onAddPage={addPage}
               onDeletePage={() => setDeletePage(true)}
             />
           )}
         </div>
+        {editing && selectedElements.length > 0 && (
+          <QuickTools
+            selection={selectedElements}
+            busy={assetBusy || transferBusy}
+            contextPoint={contextPoint}
+            onCloseContext={() => setContextPoint(null)}
+            onChange={(changes) =>
+              selectedId && changeElement(editorPage.id, selectedId, changes)
+            }
+            onDuplicate={copyElement}
+            onDelete={removeElements}
+            onLock={lockElements}
+            onLayer={layerElement}
+            onUpload={upload}
+          />
+        )}
+        {editing && imageImport && (
+          <ImageImportDialog
+            files={imageImport.files}
+            onCancel={() => setImageImport(null)}
+            onChoose={(decoration) => void importImages(decoration)}
+          />
+        )}
+        {editing && decorationSurface && (
+          <DecorationDialog
+            onCancel={() => setDecorationSurface(null)}
+            onChoose={(asset) => {
+              addSticker(asset, decorationSurface);
+              setDecorationSurface(null);
+            }}
+            onUpload={(file) => {
+              queueImages(decorationSurface, [file], {
+                x: PAGE_WIDTH / 2,
+                y: PAGE_HEIGHT / 2,
+              });
+              setDecorationSurface(null);
+            }}
+          />
+        )}
         {deletePage && (
           <DeletePageDialog
             title={activePage.title}

@@ -48,7 +48,9 @@ async function edit(page: Page) {
 }
 
 async function saved(page: Page) {
-  await expect(page.getByRole("status")).toHaveText("Saved on this device");
+  await expect(
+    page.getByRole("status", { name: "Book save status" }),
+  ).toHaveText("Saved on this device");
 }
 
 async function selectLayer(page: Page, id: string) {

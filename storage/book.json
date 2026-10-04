@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "revision": 267,
+  "revision": 317,
   "title": "Our Chronicle",
   "subtitle": "Little moments. A life well remembered.",
-  "updatedAt": "2026-10-04T02:28:19.082Z",
+  "updatedAt": "2026-10-04T04:09:40.518Z",
   "cover": {
     "style": "rose",
     "backgroundColor": "#b18b84",
@@ -75,6 +75,17 @@
         "bold": false,
         "italic": false,
         "align": "center"
+      },
+      {
+        "id": "52d22e03-8638-4d85-bbc5-bb78b54d7da8",
+        "x": 145,
+        "y": 77,
+        "width": 150,
+        "height": 42,
+        "rotation": -5,
+        "type": "sticker",
+        "asset": "masking-tape",
+        "color": "#c8b180"
       }
     ]
   },
@@ -82,7 +93,7 @@
   "audio": {
     "filename": "1cb37f68-b0f0-418a-b0f7-e1bccfffdcd5.mp3",
     "title": "Nơi Này Có Anh",
-    "volume": 0.4,
+    "volume": 0.15,
     "loop": true
   },
   "pages": [
@@ -126,7 +137,7 @@
         },
         {
           "id": "t3",
-          "x": 38,
+          "x": 42,
           "y": 151,
           "width": 364,
           "height": 88,
@@ -138,7 +149,7 @@
         {
           "id": "i1",
           "x": 52,
-          "y": 227,
+          "y": 224,
           "width": 310,
           "height": 245,
           "rotation": -3,
@@ -165,6 +176,7 @@
           "width": 116,
           "height": 143,
           "rotation": -2,
+          "locked": false,
           "type": "image",
           "filename": "9755342c-2fc3-4bb2-90ec-c909311b83ba.webp",
           "caption": "A moment worth keeping",
@@ -172,14 +184,28 @@
         },
         {
           "id": "90c40294-f78a-4c06-8d99-95b431728fe2",
-          "x": 353,
-          "y": 134,
+          "x": 362,
+          "y": 225,
           "width": 78,
           "height": 76,
           "rotation": 0,
           "type": "sticker",
           "asset": "heart",
           "color": "#bd8277"
+        },
+        {
+          "id": "ad8da781-81b0-4c36-adb0-e6df58ae2f55",
+          "x": 300,
+          "y": 1,
+          "width": 140,
+          "height": 140,
+          "rotation": 0,
+          "locked": false,
+          "type": "image",
+          "kind": "photo",
+          "filename": "0b6961ce-3f4d-4e92-82bd-de35788e7574.webp",
+          "caption": "GqcLCiWWsAAtSxv",
+          "frame": "polaroid"
         }
       ]
     },
@@ -250,6 +276,19 @@
             "width": 48.78048780487805,
             "height": 42.038656235618966
           }
+        },
+        {
+          "id": "0338551c-de49-4aad-ad2a-4cd3a42fd216",
+          "x": 332,
+          "y": 0,
+          "width": 108,
+          "height": 139.99998474121094,
+          "rotation": -60,
+          "locked": true,
+          "type": "image",
+          "filename": "d00c5d92-a352-467d-b37d-b7c6f6cf547c.webp",
+          "caption": "Akarin png_",
+          "frame": "borderless"
         }
       ]
     },
@@ -381,18 +420,6 @@
           "align": "center"
         },
         {
-          "id": "8a8647be-8284-4f66-9cf4-8d77fde7d74b",
-          "x": 8,
-          "y": 182,
-          "width": 430,
-          "height": 296,
-          "rotation": -16,
-          "type": "image",
-          "filename": "5d27d2ef-f1ab-46db-ba1c-047670098f8f.webp",
-          "caption": "A moment worth keeping",
-          "frame": "polaroid"
-        },
-        {
           "id": "80e350b3-1997-4bbb-b861-3e4144b543e6",
           "x": 118,
           "y": 497,
@@ -409,6 +436,18 @@
           "bold": true,
           "italic": true,
           "align": "center"
+        },
+        {
+          "id": "8a8647be-8284-4f66-9cf4-8d77fde7d74b",
+          "x": 8,
+          "y": 182,
+          "width": 430,
+          "height": 296,
+          "rotation": -16,
+          "type": "image",
+          "filename": "5d27d2ef-f1ab-46db-ba1c-047670098f8f.webp",
+          "caption": "A moment worth keeping",
+          "frame": "polaroid"
         }
       ]
     },
@@ -429,33 +468,9 @@
           "style": "heading"
         },
         {
-          "id": "585ad889-23c2-46bf-82d3-40b654da0188",
-          "x": 50,
-          "y": 490,
-          "width": 340,
-          "height": 55,
-          "rotation": 0,
-          "type": "text",
-          "text": "The story behind this photograph…",
-          "style": "handwritten"
-        },
-        {
-          "id": "d2a0e052-e711-4cac-a54f-2feb20f2b04c",
-          "x": 160,
-          "y": 165,
-          "width": 280,
-          "height": 309.55555555555554,
-          "rotation": -2,
-          "locked": false,
-          "type": "image",
-          "filename": "dd0cc3a5-850c-4c7d-9b5d-52cea0526e60.webp",
-          "caption": "A moment worth keeping",
-          "frame": "polaroid"
-        },
-        {
           "id": "fef32222-ffd7-48db-bff9-a3959144efab",
-          "x": 50,
-          "y": 112,
+          "x": 24,
+          "y": 103,
           "width": 280,
           "height": 309.55555555555554,
           "rotation": -2,
@@ -469,6 +484,37 @@
             "width": 72.23855522889542,
             "height": 76.92307692307692
           }
+        },
+        {
+          "id": "d2a0e052-e711-4cac-a54f-2feb20f2b04c",
+          "x": 160,
+          "y": 165,
+          "width": 280,
+          "height": 309.55555555555554,
+          "rotation": -2,
+          "locked": true,
+          "type": "image",
+          "kind": "photo",
+          "filename": "dd0cc3a5-850c-4c7d-9b5d-52cea0526e60.webp",
+          "caption": "A moment worth keeping",
+          "frame": "polaroid",
+          "crop": {
+            "x": 14.87190256194875,
+            "y": 9.999999999999998,
+            "width": 75.12809743805124,
+            "height": 80
+          }
+        },
+        {
+          "id": "585ad889-23c2-46bf-82d3-40b654da0188",
+          "x": 50,
+          "y": 490,
+          "width": 340,
+          "height": 55,
+          "rotation": 0,
+          "type": "text",
+          "text": "The story behind this photograph…",
+          "style": "handwritten"
         }
       ]
     },

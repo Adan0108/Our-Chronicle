@@ -42,12 +42,17 @@ Both modes use the same local data folder and default address. This application 
 - **Edit:** Choose **Edit scrapbook**. A closed book enters the cover editor; an open book enters the page editor. **Done editing** returns to reading pages, while **Preview cover** returns to the closed cover. Page-turn gestures pause while editing.
 - **Text:** Click a text block to edit its content, preset, curated font family, size, color, bold/italic, alignment, and rotation. Use **Text** to add a block and **Delete text** to remove it.
 - **Photos:** Select a page, then choose **Photo** to upload a JPEG, PNG, or WebP (up to 10 MB / 24 megapixels). Edit captions/frames, rotate, **Replace photo**, or **Delete image**. Drag to move and drag a corner to resize. **Crop photo** opens a drag/zoom dialog; **Apply crop** saves the crop, while **Reset crop** restores the full photo. Cropping preserves the source image.
+- **Drop or paste images:** In Edit Mode, drag JPEG, PNG, or WebP files from your computer onto a page or cover, or paste a copied image with Ctrl/Cmd+V outside text/form fields. Choose **Add as photos** or **Add as decorations**; transparent areas are preserved. Drops follow the pointer position, multiple files cascade, and pasted images start near the active canvas center. A batch is one undo step. Empty pages also offer lightweight text/decoration actions.
+- **Quick tools:** Selecting an element opens a compact toolbar beside it for common text/photo controls, crop, replace, duplicate, lock, and delete. **More** or right-click opens layer actions and other contextual choices. Detailed controls remain in the inspector. Clicking empty space or pressing Escape deselects; Reading and Presentation Mode hide all editor overlays.
+- **Multi-select:** Shift-click elements or Layers rows to toggle selection on the same page/cover. Drag an unlocked selected element to move the unlocked members together; duplicate, delete, and layer actions apply to the selection. Position-locked members stay fixed during group movement. Selection itself is session-only.
+- **Alignment:** Moving elements lightly snaps to page centers, edges, 24-pixel margins, and nearby element edges/centers, with temporary guide lines. Hold Alt/Option during a drag for free positioning. Rotated elements use their original layout boxes for alignment and page bounds.
+- **Editor shortcuts:** Outside inputs, dialogs, and menus, Delete/Backspace deletes the selection, Ctrl/Cmd+D duplicates, Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes, and Escape closes contextual UI or deselects. Alt/Option+ArrowUp/ArrowDown moves the selection forward/backward one layer. Normal typing and clipboard paste in fields retain their usual behavior.
 - **Photo styles:** Choose plain, polaroid, soft shadow, paper frame, taped photo, or borderless. Frames remain editable styles; they are not baked into the image.
 - **Decorations:** Choose **Decorations** for the small built-in tape, botanical, doodle, label, and paper collection, or **Upload decoration** for your own transparent PNG/WebP. Decorations have no photo frame or background. Move, resize, crop, rotate, duplicate, layer, and lock them like other elements; built-in stickers also have editable colors, and date labels have editable text. These controls also work on the cover.
 - **Themes:** Expand **Book theme** in the inspector and choose Café, Vintage Journal, Minimal Ivory, Wedding, or Campus Diary. Themes change the environment and paper accents without rewriting your text styles or moving content. Theme changes support undo/redo.
 - **Presentation:** In reading mode, choose **Present book** for a centered book with minimal controls. Mouse page turns and native cover opening/closing still work. Use **Enter fullscreen** if desired; **Exit presentation** or Escape returns to reading. Leaving fullscreen also exits presentation.
 - **Music:** The compact Music control shows whether a track is not configured, paused, or playing, with Play/Pause available directly. Open its settings to adjust volume from 0–100%; 0% mutes without removing the track. In edit mode, upload one local MP3, WAV, or Ogg (Vorbis/Opus) file up to 20 MB and optionally enable looping. A newly selected or replacement track starts at 40%; existing saved volume stays unchanged on refresh or import. Volume is saved with the book and included in exports. Audio never autoplays, including after refresh or import; playback itself is not an undo step.
-- **Layers and locks:** Duplicate selected text/photos, **Bring forward** or **Send backward** one layer at a time. **Layers** lists frontmost elements first, including covered items. **Lock position** prevents movement/resizing while allowing appearance edits; **Unlock position** restores movement.
+- **Layers and locks:** **Layers** lists frontmost elements first, with text previews, photo captions/filenames, and sticker names. Drag a row's handle to reorder; keyboard users can focus the handle, press Space, use Up/Down, and press Space to finish or Escape to cancel. Reordering changes the book immediately, supports undo/redo, and persists. Click a row to select even covered or locked items. **Bring forward** / **Send backward** remain available. **Lock position** prevents movement/resizing while allowing appearance edits and explicit duplicate/delete actions; **Unlock position** restores movement.
 - **Pages:** Add a blank page, duplicate a page, move it earlier/later, or choose **New page from template** (journal, single photo, two photos, collage). Select empty photo frames and use **Add photo to frame** to fill them. Deletion asks for confirmation, and at least two pages must remain.
 - **Customize the cover:** Use **Edit cover** in the page inspector or choose **Edit scrapbook** with the book closed. Select cover text or add text/photos, then use the same typography, crop, transform, layer, duplicate, and lock controls as pages. Cover editing prioritizes element manipulation, so dragging/resizing does not open the book. Choose **Preview cover** to return to normal click/drag opening, or **Edit pages** to edit the inside.
 - **Cover appearance:** Choose **Coffee leather**, **Cream linen**, **Muted sage**, **Dusty rose**, or **Minimal ivory**, then adjust **Cover color**. The page editor's **Book cover details** keeps the book title/subtitle; after customization, visible cover text is edited through its own text blocks.
@@ -112,6 +117,7 @@ Formatting commands: `npm run format` and `npm run format:check`.
 - Books support 2–100 pages and up to 60 elements per page or cover.
 - Desktop/laptop is the primary experience. Narrow screens use horizontal page viewing and an editor below the book.
 - Text boxes do not expand automatically; resize them when longer text needs more space.
+- Multi-selection stays within one page or cover; there is no grouping, cross-page selection, or collective resize. Alignment follows unrotated layout boxes. Clipboard image support depends on the browser and copied content.
 - Cover customization applies to the front cover; its decorative emblem and border are fixed.
 - Uploaded images are converted to WebP and limited to 2400 pixels on the longest edge. Images with alpha use lossless WebP encoding without flattening; resizing can still resample pixels. Original uploaded files are not retained. Interrupted uploads can leave unused asset files.
 - Undo history is session-only; very long sessions can outlast image-recovery retention. Crop uses the photo frame's aspect ratio.
@@ -130,7 +136,9 @@ Our-Chronicle/
 │   │   │   └── audio/                # Upload, range-serve, and delete audio
 │   │   ├── page.tsx                  # Load the book and render the app
 │   │   ├── layout.tsx                # Root layout and metadata
-│   │   └── globals.css               # Theme and responsive styles
+│   │   ├── globals.css               # Theme and responsive styles
+│   │   ├── editor-canvas.css         # Selection, guides, empty/drop feedback
+│   │   └── editor-controls.css       # Floating tools and sortable Layers styles
 │   ├── components/
 │   │   ├── book/
 │   │   │   ├── cover.tsx             # Native front cover and standalone edit canvas
@@ -140,6 +148,10 @@ Our-Chronicle/
 │   │   │   ├── sticker.tsx           # Lightweight built-in SVG decorations
 │   │   │   └── page-renderer.tsx     # Page renderer and shared cover/page element layer
 │   │   ├── editor/                   # Inspector, crop/template dialogs, deletion
+│   │   │   ├── layers-panel.tsx      # Accessible sortable layer rows
+│   │   │   ├── quick-tools.tsx       # Floating toolbar and context menu
+│   │   │   ├── editor-context.tsx    # Editor canvas selection/action callbacks
+│   │   │   └── image-import-dialog.tsx # Photo/decoration choice for drops and paste
 │   │   └── scrapbook.tsx             # Reading/editing UI and interactions
 │   ├── hooks/
 │   │   └── use-book.ts               # Autosave, revisions, and bounded history
@@ -147,6 +159,7 @@ Our-Chronicle/
 │   │   ├── api.ts                    # Request checks and API errors
 │   │   ├── cover.ts                  # Cover palettes, legacy defaults, image references
 │   │   ├── editor.ts                 # Data-driven templates and duplication
+│   │   ├── editor-geometry.ts        # Bounded group movement, snapping, drop coordinates
 │   │   ├── decorations.ts            # Sticker catalog and element defaults
 │   │   ├── themes.ts                 # Curated theme identifiers and labels
 │   │   └── storage/
@@ -166,6 +179,8 @@ Our-Chronicle/
 ├── tests/
 │   ├── scrapbook.spec.ts             # Browser flows and API checks
 │   ├── editor-phase.spec.ts           # Formatting, layers, templates, and history
+│   ├── editor-ux.spec.ts              # Fresh-page interactions, clipboard, tools, gestures
+│   ├── editor-geometry.spec.ts        # Snapping, group bounds, locks, and scaled coordinates
 │   ├── cover.spec.ts                  # Cover editing, persistence, and portable round trips
 │   ├── cover-storage.spec.ts          # Cover validation, recovery, and archive compatibility
 │   ├── portability.spec.ts            # Round trips, backups, and archive safety
@@ -178,7 +193,7 @@ Our-Chronicle/
 
 Pages and customized covers contain arrays of the same text, image, and sticker elements rather than hard-coded layouts. Array order defines layers from back to front. Images can have an optional photo/decoration kind; sticker elements reference the local SVG catalog. Optional book theme/audio fields leave older books compatible, with Café as the theme fallback. The optional `cover` object stores its style, background color, and elements. Existing books without it render an editable default from their title/subtitle without writing a migration on load. Optional formatting, crop, and lock fields retain their original presets when absent.
 
-Cover and page editing reuse the element renderer, inspector, image/crop controls, autosave, and bounded history. The reader uses `react-pageflip` / StPageFlip, including native cover opening/closing. A standalone cover canvas takes priority while editing. The editor uses `react-rnd` and `react-easy-crop`; audio uses the browser's native media element and `music-metadata` for server-side validation. API routes validate data and call the storage interface, keeping filesystem persistence separate from the UI.
+Cover and page editing reuse the element renderer, inspector, image/crop controls, autosave, and bounded history. The reader uses `react-pageflip` / StPageFlip, including native cover opening/closing. A standalone cover canvas takes priority while editing. The editor uses `react-rnd`, `react-easy-crop`, `@dnd-kit/sortable` for Layers, and `@floating-ui/react` for viewport-aware tools. These tools render outside the book's measured surface. Audio uses the browser's native media element and `music-metadata` for server-side validation. API routes validate data and call the storage interface, keeping filesystem persistence separate from the UI.
 
 Portability uses `yazl` to write ZIPs, `yauzl` to read bounded entries, and `buffer-crc32` to verify integrity. Imports stage images/audio under fresh safe names and atomically replace the book JSON after creating a safety backup. Earlier files are archived only after that commit; ordinary undo recovery remains bounded and is not exported.
 
@@ -200,6 +215,20 @@ src/components/book/page-renderer.tsx
 Editor UI:
 src/components/editor/
 
+Layer drag ordering:
+src/components/editor/layers-panel.tsx
+
+Floating toolbar and context menu:
+src/components/editor/quick-tools.tsx
+
+Selection, shortcuts, drops, and clipboard:
+src/components/scrapbook.tsx
+src/components/editor/editor-context.tsx
+
+Snapping and group movement:
+src/lib/editor-geometry.ts
+src/components/book/page-renderer.tsx
+
 Templates and duplication:
 src/lib/editor.ts
 
@@ -208,6 +237,8 @@ src/components/scrapbook.tsx
 
 Theme/styles:
 src/app/globals.css
+src/app/editor-canvas.css
+src/app/editor-controls.css
 src/lib/themes.ts
 
 Sticker catalog and artwork:

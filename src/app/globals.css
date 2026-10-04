@@ -1,4 +1,57 @@
 @import "tailwindcss";
+@import "./editor-canvas.css";
+@import "./editor-controls.css";
+
+.image-import-dialog {
+  position: fixed;
+  margin: auto;
+  width: min(480px, calc(100vw - 32px));
+  padding: 28px;
+  border: 1px solid #d6cbb8;
+  border-radius: 8px;
+  color: var(--ink);
+  background: #faf6eb;
+  box-shadow: 0 20px 70px #38271930;
+}
+.image-import-dialog::backdrop {
+  background: #342f2555;
+}
+.image-import-dialog h2 {
+  margin: 0 0 12px;
+  font: 26px var(--serif);
+}
+.image-import-dialog p {
+  color: #827363;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.image-import-dialog .dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px;
+}
+.image-import-options {
+  display: flex;
+  gap: 12px;
+  margin: 20px 0;
+}
+.image-import-options .secondary-button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 12px;
+  text-align: center;
+  white-space: normal;
+}
+.image-import-options small {
+  font-size: 11px;
+  color: #887862;
+  line-height: 1.5;
+  font-weight: 400;
+}
 :root {
   --ink: #493d32;
   --muted: #827363;

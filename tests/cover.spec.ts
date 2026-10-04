@@ -31,7 +31,9 @@ async function readBook(request: APIRequestContext): Promise<Book> {
 }
 
 async function saved(page: Page) {
-  await expect(page.getByRole("status")).toHaveText("Saved on this device");
+  await expect(
+    page.getByRole("status", { name: "Book save status" }),
+  ).toHaveText("Saved on this device");
 }
 
 async function editCover(page: Page) {

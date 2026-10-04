@@ -23,7 +23,9 @@ async function firstSpread(page: Page) {
   await expect(page.locator(".book-spread")).toHaveCSS("transform", "none");
 }
 async function saved(page: Page) {
-  await expect(page.getByRole("status")).toHaveText("Saved on this device");
+  await expect(
+    page.getByRole("status", { name: "Book save status" }),
+  ).toHaveText("Saved on this device");
 }
 
 async function dragSpread(
@@ -653,7 +655,9 @@ test("mobile can view both pages, edit the right page, and verify its save", asy
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page);
-  await expect(page.getByRole("status")).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: "Book save status" }),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Show right page", exact: true })
     .click();

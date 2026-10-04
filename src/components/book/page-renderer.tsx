@@ -6,12 +6,22 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent,
+  type HTMLAttributes,
   type MouseEvent,
 } from "react";
 import Image from "next/image";
 import { Rnd } from "react-rnd";
 import { ImageIcon, LockKeyhole } from "lucide-react";
 import { DECORATIONS } from "@/lib/decorations";
+import {
+  canvasPoint,
+  moveSelection,
+  type CanvasPoint,
+  type ElementMove,
+  type SnapGuide,
+} from "@/lib/editor-geometry";
+import { CanvasEditorContext } from "@/components/editor/editor-context";
 import { StickerArt } from "./sticker";
 import {
   type BookPage,
@@ -189,49 +199,296 @@ type ElementLayerProps = Pick<
   "editing" | "selectedId" | "onSelect" | "onChange"
 > & {
   elements: BookElement[];
+  surfaceId?: string;
 };
 
-// Keep elements as direct children of their canvas: react-rnd's parent bounds
-// and the native page-flip event surface stay the same for pages and covers.
-export function ElementLayer({
+export function useCanvasSurface(
+  surfaceId: string,
+  editing: boolean,
+  onSelect?: (id: string | null) => void,
+) {
+  const editor = useContext(CanvasEditorContext);
+  const [dropActive, setDropActive] = useState(false);
+  const dragDepth = useRef(0);
+  const backgroundPointer = useRef(false);
+  const disabled = Boolean(editor?.disabled);
+  const hasFiles = (event: DragEvent<HTMLDivElement>) =>
+    Array.from(event.dataTransfer.types).includes("Files");
+  const acceptsFiles = (event: DragEvent<HTMLDivElement>) =>
+    !disabled && editor && hasFiles(event);
+  const handlers: Pick<
+    HTMLAttributes<HTMLDivElement>,
+    | "onPointerDown"
+    | "onClick"
+    | "onDragEnter"
+    | "onDragOver"
+    | "onDragLeave"
+    | "onDrop"
+  > = editing
+    ? {
+        onPointerDown: (event) => {
+          backgroundPointer.current = event.target === event.currentTarget;
+        },
+        onClick: (event) => {
+          if (
+            !disabled &&
+            backgroundPointer.current &&
+            event.target === event.currentTarget
+          ) {
+            if (editor) editor.select(surfaceId, null);
+            else onSelect?.(null);
+          }
+          backgroundPointer.current = false;
+        },
+        onDragEnter: (event) => {
+          if (!acceptsFiles(event)) return;
+          event.preventDefault();
+          dragDepth.current += 1;
+          setDropActive(true);
+        },
+        onDragOver: (event) => {
+          if (!editor || !hasFiles(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = disabled ? "none" : "copy";
+        },
+        onDragLeave: (event) => {
+          if (!editor || !hasFiles(event)) return;
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (!dragDepth.current) setDropActive(false);
+        },
+        onDrop: (event) => {
+          if (!editor || !hasFiles(event)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          dragDepth.current = 0;
+          setDropActive(false);
+          const files = Array.from(event.dataTransfer.files);
+          if (!files.length || disabled) return;
+          const point = canvasPoint(
+            event.currentTarget.getBoundingClientRect(),
+            {
+              x: event.clientX,
+              y: event.clientY,
+            },
+          );
+          editor.dropFiles(surfaceId, files, point);
+        },
+      }
+    : {};
+  return { handlers, dropActive: editing && dropActive && !disabled, disabled };
+}
+
+export function CanvasHints({
+  surfaceId,
   elements,
-  editing = false,
+  dropActive,
+}: {
+  surfaceId: string;
+  elements: BookElement[];
+  dropActive: boolean;
+}) {
+  const editor = useContext(CanvasEditorContext);
+  if (!editor) return null;
+  return (
+    <>
+      {elements.length === 0 && !dropActive && (
+        <div className="canvas-empty-hint" data-testid="empty-page-hint">
+          <ImageIcon size={25} strokeWidth={1} aria-hidden="true" />
+          <p>A fresh page for your memories</p>
+          <span>Drop an image here, or start with a little something.</span>
+          <div className="canvas-empty-actions">
+            <button
+              type="button"
+              disabled={editor.disabled}
+              onClick={(event) => {
+                event.stopPropagation();
+                editor.select(surfaceId, null);
+                editor.addText(surfaceId);
+              }}
+              aria-label="Add text to empty page"
+            >
+              Add text
+            </button>
+            <button
+              type="button"
+              disabled={editor.disabled}
+              onClick={(event) => {
+                event.stopPropagation();
+                editor.select(surfaceId, null);
+                editor.addDecoration(surfaceId);
+              }}
+              aria-label="Add decoration to empty page"
+            >
+              Decoration
+            </button>
+          </div>
+        </div>
+      )}
+      {dropActive && (
+        <div
+          className="canvas-drop-highlight"
+          data-testid="canvas-drop-highlight"
+          aria-hidden="true"
+        >
+          <ImageIcon size={27} strokeWidth={1} />
+          <span>Place your image here</span>
+        </div>
+      )}
+    </>
+  );
+}
+
+type DragSession = {
+  anchor: BookElement;
+  elements: BookElement[];
+  selectedIds: string[];
+  moved: boolean;
+};
+type DragPreview = {
+  anchorId: string;
+  raw: CanvasPoint;
+  changes: ElementMove[];
+  guides: SnapGuide[];
+};
+
+function EditingElements({
+  elements,
   selectedId,
+  surfaceId = "",
   onSelect,
   onChange,
 }: ElementLayerProps) {
+  const editor = useContext(CanvasEditorContext);
+  const [preview, setPreview] = useState<DragPreview | null>(null);
+  const dragSession = useRef<DragSession | null>(null);
+  const suppressClick = useRef<string | null>(null);
+  const selectedIds = editor
+    ? editor.activeSurfaceId === surfaceId
+      ? editor.selectedIds
+      : []
+    : selectedId
+      ? [selectedId]
+      : [];
+  const disabled = Boolean(editor?.disabled);
+  const select = (id: string, additive = false) => {
+    if (disabled) return;
+    if (editor) editor.select(surfaceId, id, additive);
+    else onSelect?.(id);
+  };
+  const clicked = (event: MouseEvent<HTMLDivElement>, id: string) => {
+    event.stopPropagation();
+    if (suppressClick.current === id) {
+      suppressClick.current = null;
+      return;
+    }
+    // A click on a member keeps the group intact for the next drag.
+    if (event.shiftKey || !selectedIds.includes(id) || selectedIds.length < 2)
+      select(id, event.shiftKey);
+  };
+  const menu = (id: string, point: CanvasPoint) => {
+    if (!editor || disabled) return;
+    editor.contextMenu(surfaceId, id, point);
+  };
   return (
     <>
-      {elements.map((element, index) =>
-        editing ? (
+      {elements.map((element, index) => {
+        const selected = selectedIds.includes(element.id);
+        const draft = preview?.changes.find(
+          (change) => change.id === element.id,
+        );
+        const anchor = preview?.anchorId === element.id;
+        const position = anchor && preview ? preview.raw : draft || element;
+        return (
           <Rnd
             key={element.id}
             size={{ width: element.width, height: element.height }}
-            position={{ x: element.x, y: element.y }}
+            position={{ x: position.x, y: position.y }}
             bounds="parent"
             minWidth={40}
             minHeight={30}
-            enableResizing={selectedId === element.id && !element.locked}
-            disableDragging={selectedId !== element.id || element.locked}
-            style={{ zIndex: index + 1 }}
+            enableResizing={
+              selected &&
+              selectedIds.length === 1 &&
+              !element.locked &&
+              !disabled
+            }
+            disableDragging={Boolean(element.locked) || disabled}
+            style={{
+              zIndex: index + 1,
+              // react-draggable owns transform during the gesture. A separate
+              // translation keeps the anchor aligned with its snapped group.
+              translate:
+                anchor && draft
+                  ? `${draft.x - position.x}px ${draft.y - position.y}px`
+                  : undefined,
+            }}
             data-element-id={element.id}
             data-element-type={element.type}
             data-testid={`element-${element.id}`}
             data-locked={Boolean(element.locked)}
-            className={`scrap-element editable-element ${selectedId === element.id ? "selected-element" : ""} ${element.locked ? "locked-element" : ""}`}
-            onClick={(event: MouseEvent<HTMLDivElement>) => {
+            data-selected={selected}
+            data-group-member={selected && selectedIds.length > 1}
+            data-dragging={Boolean(draft)}
+            className={`scrap-element editable-element ${selected ? "selected-element" : ""} ${element.locked ? "locked-element" : ""} ${selected && selectedIds.length > 1 ? "group-selected-element" : ""}`}
+            onClick={(event: MouseEvent<HTMLDivElement>) =>
+              clicked(event, element.id)
+            }
+            onContextMenu={(event: MouseEvent<HTMLDivElement>) => {
+              if (!editor || disabled) return;
+              event.preventDefault();
               event.stopPropagation();
-              onSelect?.(element.id);
+              menu(element.id, { x: event.clientX, y: event.clientY });
             }}
-            onDragStop={(_event, data) => {
-              if (element.locked) return;
-              onChange?.(element.id, {
-                x: Math.max(0, Math.min(PAGE_WIDTH - element.width, data.x)),
-                y: Math.max(0, Math.min(PAGE_HEIGHT - element.height, data.y)),
+            onDragStart={(event) => {
+              if (disabled || element.locked || event.shiftKey) return false;
+              suppressClick.current = null;
+              if (!selected) select(element.id);
+              dragSession.current = {
+                anchor: element,
+                elements,
+                selectedIds: selected ? selectedIds : [element.id],
+                moved: false,
+              };
+            }}
+            onDrag={(event, data) => {
+              const session = dragSession.current;
+              if (!session) return;
+              const delta = {
+                x: data.x - session.anchor.x,
+                y: data.y - session.anchor.y,
+              };
+              session.moved ||= Math.abs(delta.x) + Math.abs(delta.y) >= 2;
+              const result = moveSelection(
+                session.elements,
+                session.selectedIds,
+                delta,
+                { snap: !event.altKey },
+              );
+              setPreview({
+                anchorId: element.id,
+                raw: { x: data.x, y: data.y },
+                ...result,
               });
             }}
+            onDragStop={(event, data) => {
+              const session = dragSession.current;
+              dragSession.current = null;
+              setPreview(null);
+              if (!session?.moved || disabled || element.locked) return;
+              const result = moveSelection(
+                session.elements,
+                session.selectedIds,
+                { x: data.x - session.anchor.x, y: data.y - session.anchor.y },
+                { snap: !event.altKey },
+              );
+              suppressClick.current = element.id;
+              if (editor) editor.move(surfaceId, result.changes);
+              else
+                for (const change of result.changes)
+                  onChange?.(change.id, { x: change.x, y: change.y });
+            }}
             onResizeStop={(_event, _direction, node, _delta, position) => {
-              if (element.locked) return;
+              if (element.locked || disabled) return;
               onChange?.(element.id, {
                 x: Math.max(0, position.x),
                 y: Math.max(0, position.y),
@@ -250,6 +507,8 @@ export function ElementLayer({
               className="element-hit-area"
               role="button"
               tabIndex={0}
+              aria-pressed={selected}
+              aria-disabled={disabled}
               aria-label={
                 element.type === "text"
                   ? `Edit text: ${element.text.slice(0, 45)}`
@@ -259,44 +518,99 @@ export function ElementLayer({
                       ? `Select decoration: ${element.caption || "uploaded asset"}`
                       : `Select image: ${element.caption || "photograph"}`
               }
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelect?.(element.id);
+              onPointerDown={() => {
+                suppressClick.current = null;
               }}
+              onClick={(event) => clicked(event, element.id)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  onSelect?.(element.id);
+                  select(element.id, event.shiftKey);
+                } else if (
+                  event.key === "ContextMenu" ||
+                  (event.shiftKey && event.key === "F10")
+                ) {
+                  event.preventDefault();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  menu(element.id, {
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2,
+                  });
                 }
               }}
             >
               <ElementContent element={element} />
             </div>
-            {element.locked && selectedId === element.id && (
-              <span className="element-lock-mark" aria-hidden="true">
+            {element.locked && (
+              <span
+                className="element-lock-mark"
+                aria-hidden="true"
+                title="Position locked"
+              >
                 <LockKeyhole size={10} />
               </span>
             )}
           </Rnd>
-        ) : (
-          <div
-            key={element.id}
-            className="scrap-element reading-element"
-            data-element-id={element.id}
-            data-element-type={element.type}
-            data-testid={`element-${element.id}`}
-            style={{
-              left: element.x,
-              top: element.y,
-              width: element.width,
-              height: element.height,
-              zIndex: index + 1,
-            }}
-          >
-            <ElementContent element={element} />
-          </div>
-        ),
-      )}
+        );
+      })}
+      {preview?.guides.map((guide) => (
+        <span
+          key={guide.axis}
+          className={`canvas-snap-guide guide-${guide.axis}`}
+          data-testid={`snap-guide-${guide.axis}`}
+          data-position={guide.position}
+          style={
+            guide.axis === "x"
+              ? { left: guide.position }
+              : { top: guide.position }
+          }
+          aria-hidden="true"
+        />
+      ))}
+    </>
+  );
+}
+
+// Keep elements as direct children of their canvas: react-rnd's parent bounds
+// and the native page-flip event surface stay the same for pages and covers.
+export function ElementLayer({
+  elements,
+  editing = false,
+  selectedId,
+  surfaceId,
+  onSelect,
+  onChange,
+}: ElementLayerProps) {
+  if (editing)
+    return (
+      <EditingElements
+        elements={elements}
+        selectedId={selectedId}
+        surfaceId={surfaceId}
+        onSelect={onSelect}
+        onChange={onChange}
+      />
+    );
+  return (
+    <>
+      {elements.map((element, index) => (
+        <div
+          key={element.id}
+          className="scrap-element reading-element"
+          data-element-id={element.id}
+          data-element-type={element.type}
+          data-testid={`element-${element.id}`}
+          style={{
+            left: element.x,
+            top: element.y,
+            width: element.width,
+            height: element.height,
+            zIndex: index + 1,
+          }}
+        >
+          <ElementContent element={element} />
+        </div>
+      ))}
     </>
   );
 }
@@ -306,35 +620,32 @@ export const PageRenderer = forwardRef<HTMLDivElement, Props>(
     { page, number, editing = false, selectedId, active, onSelect, onChange },
     ref,
   ) {
-    const backgroundPointer = useRef(false);
+    const canvas = useCanvasSurface(page.id, editing, onSelect);
     return (
       <div
         ref={ref}
-        className={`book-page page-${number % 2 ? "left" : "right"} paper-${page.paper} ${editing ? "editable-page" : ""} ${active ? "active-page" : ""}`}
+        className={`book-page page-${number % 2 ? "left" : "right"} paper-${page.paper} ${editing ? "editable-page" : ""} ${active ? "active-page" : ""} ${canvas.dropActive ? "canvas-drop-active" : ""}`}
         data-testid={`page-${number}`}
+        data-editor-surface={editing ? page.id : undefined}
         style={{ width: PAGE_WIDTH, height: PAGE_HEIGHT }}
-        onPointerDown={(event) => {
-          if (editing)
-            backgroundPointer.current = event.target === event.currentTarget;
-        }}
-        onClick={(event) => {
-          if (
-            editing &&
-            backgroundPointer.current &&
-            event.target === event.currentTarget
-          )
-            onSelect?.(null);
-          backgroundPointer.current = false;
-        }}
+        {...canvas.handlers}
       >
         <div className="page-grain" aria-hidden="true" />
         <ElementLayer
           elements={page.elements}
+          surfaceId={page.id}
           editing={editing}
           selectedId={selectedId}
           onSelect={onSelect}
           onChange={onChange}
         />
+        {editing && (
+          <CanvasHints
+            surfaceId={page.id}
+            elements={page.elements}
+            dropActive={canvas.dropActive}
+          />
+        )}
         <span className="page-number">{String(number).padStart(2, "0")}</span>
       </div>
     );
