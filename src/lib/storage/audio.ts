@@ -65,6 +65,54 @@ function completeContainer(bytes: Buffer, wav: boolean, ogg: boolean) {
   return true;
 }
 
+const ZERO_PADDING_WARNING = /^Invalid ID3v2\.4 frame-header-ID: \x00{4}$/;
+
+function id3v24ZeroPaddingWarnings(bytes: Buffer) {
+  if (
+    bytes.length < 10 ||
+    bytes.toString("ascii", 0, 3) !== "ID3" ||
+    bytes[3] !== 4 ||
+    (bytes[5] & 0x10) !== 0
+  )
+    return 0;
+
+  function syncsafe(offset: number, end: number) {
+    if (offset + 4 > end) return undefined;
+    let size = 0;
+    for (let index = offset; index < offset + 4; index++) {
+      if (bytes[index] & 0x80) return undefined;
+      size = size * 128 + bytes[index];
+    }
+    return size;
+  }
+
+  const tagSize = syncsafe(6, bytes.length);
+  if (tagSize === undefined || tagSize > bytes.length - 10) return 0;
+  const end = 10 + tagSize;
+  let offset = 10;
+  if (bytes[5] & 0x40) {
+    const extendedSize = syncsafe(offset, end);
+    if (
+      extendedSize === undefined ||
+      extendedSize < 6 ||
+      extendedSize > end - offset
+    )
+      return 0;
+    offset += extendedSize;
+  }
+  // Skip frame contents; inspect only bounded headers and the padding bytes.
+  while (offset + 10 <= end) {
+    if (bytes.readUInt32BE(offset) === 0)
+      return bytes.subarray(offset, end).every((byte) => byte === 0)
+        ? Math.floor((end - offset) / 10)
+        : 0;
+    const frameSize = syncsafe(offset + 4, end);
+    if (frameSize === undefined || frameSize > end - offset - 10) return 0;
+    offset += 10 + frameSize;
+  }
+  return 0;
+}
+
 export async function validateAudio(filename: string, bytes: Buffer) {
   const mimeType = audioMime(filename);
   if (!bytes.length || bytes.length > AUDIO_MAX_BYTES)
@@ -93,6 +141,12 @@ export async function validateAudio(filename: string, bytes: Buffer) {
     const { format } = metadata;
     const container = wav ? "WAVE" : ogg ? "Ogg" : "MPEG";
     const codec = format.codec ?? "";
+    const paddingWarnings = metadata.quality.warnings.filter((warning) =>
+      ZERO_PADDING_WARNING.test(warning.message),
+    ).length;
+    const zeroPadding =
+      paddingWarnings > 0 &&
+      paddingWarnings === id3v24ZeroPaddingWarnings(bytes);
     if (
       format.container !== container ||
       !format.sampleRate ||
@@ -102,9 +156,16 @@ export async function validateAudio(filename: string, bytes: Buffer) {
       format.duration <= 0 ||
       (!wav && !ogg && !/Layer 3/i.test(codec)) ||
       (ogg && !/Vorbis|Opus/i.test(codec)) ||
-      metadata.quality.warnings.some((warning) =>
-        /truncat|corrupt|invalid|end.of.file/i.test(warning.message),
-      )
+      metadata.quality.warnings.some((warning) => {
+        // Exempt the parser's empty-frame warning only for verified zero
+        // padding, never a malformed NUL ID with nonzero size/flags/payload.
+        const padding =
+          zeroPadding && ZERO_PADDING_WARNING.test(warning.message);
+        return (
+          !padding &&
+          /truncat|corrupt|invalid|end.of.file/i.test(warning.message)
+        );
+      })
     )
       throw new Error("Unreadable audio stream");
     return { duration: format.duration };

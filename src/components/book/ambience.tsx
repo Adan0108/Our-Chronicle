@@ -14,6 +14,7 @@ import {
 import type { BookAudio } from "@/types/book";
 
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+const NEW_TRACK_VOLUME = 0.4;
 
 type Props = {
   audio?: BookAudio;
@@ -31,6 +32,7 @@ export function BookAmbience({
   onBusyChange,
 }: Props) {
   const popoverId = useId();
+  const volumeId = `${popoverId}-volume`;
   const mediaRef = useRef<HTMLAudioElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -45,7 +47,7 @@ export function BookAmbience({
   useEffect(() => {
     const media = mediaRef.current;
     if (!media) return;
-    media.volume = audio?.volume ?? 0.35;
+    media.volume = audio?.volume ?? NEW_TRACK_VOLUME;
     media.loop = audio?.loop ?? true;
   }, [audio?.filename, audio?.volume, audio?.loop]);
 
@@ -64,6 +66,12 @@ export function BookAmbience({
     );
   };
 
+  const showPlaybackError = (message: string) => {
+    setError(message);
+    const popover = popoverRef.current;
+    if (popover && !popover.matches(":popover-open")) popover.showPopover();
+  };
+
   const togglePlayback = async () => {
     const media = mediaRef.current;
     if (!media || !audio || blocked) return;
@@ -80,7 +88,7 @@ export function BookAmbience({
           (cause instanceof DOMException && cause.name === "AbortError")
         )
           return;
-        setError(
+        showPlaybackError(
           "This track could not play. Try another MP3, WAV, or Ogg file.",
         );
       }
@@ -121,7 +129,9 @@ export function BookAmbience({
       onChange({
         filename: result.filename,
         title: title || "My ambience",
-        volume: audio?.volume ?? 0.35,
+        // Every newly chosen track starts gently, including replacements.
+        // Existing saved settings are never changed merely by loading a book.
+        volume: NEW_TRACK_VOLUME,
         loop: audio?.loop ?? true,
       });
     } catch (cause) {
@@ -136,8 +146,6 @@ export function BookAmbience({
       onBusyChange?.(false);
     }
   };
-
-  if (!audio && !editing) return null;
 
   return (
     <div className="ambience-control">
@@ -155,28 +163,63 @@ export function BookAmbience({
           onError={(event) => {
             if (event.currentTarget !== mediaRef.current) return;
             stopPlayback(audio.filename);
-            setError(
+            showPlaybackError(
               "This track could not be read. Choose another audio file.",
             );
           }}
         />
       )}
-      <button
-        ref={triggerRef}
-        className={`ambience-trigger ${playing ? "ambience-playing" : ""}`}
-        popoverTarget={popoverId}
-        aria-label="Ambience"
-        aria-expanded={open}
-        aria-controls={popoverId}
-        title={audio ? `Ambience: ${audio.title}` : "Add music or ambience"}
-        disabled={disabled}
+      <div
+        className={`ambience-toolbar ${playing ? "ambience-playing" : ""}`}
+        role="group"
+        aria-label="Music controls"
       >
-        <Headphones size={16} aria-hidden="true" />
-        <span>Ambience</span>
-        {playing && (
-          <span className="ambience-playing-dot" aria-hidden="true" />
-        )}
-      </button>
+        <button
+          ref={triggerRef}
+          className="ambience-trigger"
+          popoverTarget={popoverId}
+          aria-label="Music settings"
+          aria-expanded={open}
+          aria-controls={popoverId}
+          title={
+            audio ? `Music settings: ${audio.title}` : "Add music or ambience"
+          }
+          disabled={blocked}
+        >
+          <Headphones size={16} aria-hidden="true" />
+          <span className="ambience-summary">
+            <span className="ambience-label">Music</span>
+            <span
+              className="ambience-state"
+              data-testid="music-playback-status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {!audio ? "Not configured" : playing ? "Playing" : "Paused"}
+            </span>
+          </span>
+        </button>
+        <button
+          className="ambience-quick-play"
+          aria-label={playing ? "Pause music" : "Play music"}
+          title={
+            !audio
+              ? "Add a track in Music settings first"
+              : playing
+                ? "Pause music"
+                : "Play music"
+          }
+          disabled={!audio || blocked}
+          onClick={() => void togglePlayback()}
+        >
+          {playing ? (
+            <Pause size={14} aria-hidden="true" />
+          ) : (
+            <Play size={14} aria-hidden="true" />
+          )}
+          <span>{playing ? "Pause" : "Play"}</span>
+        </button>
+      </div>
       <div
         ref={popoverRef}
         id={popoverId}
@@ -215,21 +258,27 @@ export function BookAmbience({
             <label className="ambience-volume">
               <Volume2 size={14} aria-hidden="true" /> Volume
               <input
+                id={volumeId}
                 type="range"
                 aria-label="Ambience volume"
                 min={0}
-                max={1}
-                step={0.01}
-                value={audio.volume}
+                max={100}
+                step={1}
+                value={Math.round(audio.volume * 100)}
+                aria-valuetext={`${Math.round(audio.volume * 100)}%`}
                 disabled={blocked}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const volume = Number(event.currentTarget.value) / 100;
+                  if (mediaRef.current) mediaRef.current.volume = volume;
                   onChange({
                     ...audio,
-                    volume: Number(event.currentTarget.value),
-                  })
-                }
+                    volume,
+                  });
+                }}
               />
-              <span>{Math.round(audio.volume * 100)}%</span>
+              <output htmlFor={volumeId}>
+                {Math.round(audio.volume * 100)}%
+              </output>
             </label>
             {editing && (
               <label className="ambience-loop">
@@ -248,8 +297,10 @@ export function BookAmbience({
           </>
         ) : (
           <p className="ambience-empty">
-            Add a local track to accompany your memories. Playback starts only
-            when you choose Play.
+            {editing
+              ? "Upload a local track to accompany your memories."
+              : "Choose Edit scrapbook to add a local track to your book."}{" "}
+            Playback starts only when you choose Play.
           </p>
         )}
         {editing && (
@@ -290,7 +341,8 @@ export function BookAmbience({
               </button>
             )}
             <p className="field-hint">
-              MP3, WAV, or Ogg, up to 20 MB. Saved with your book.
+              MP3, WAV, or Ogg, up to 20 MB. New tracks start at 40% volume.
+              Saved with your book.
             </p>
           </div>
         )}

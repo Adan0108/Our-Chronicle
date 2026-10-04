@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "revision": 259,
+  "revision": 267,
   "title": "Our Chronicle",
   "subtitle": "Little moments. A life well remembered.",
-  "updatedAt": "2026-10-04T01:27:08.582Z",
+  "updatedAt": "2026-10-04T02:28:19.082Z",
   "cover": {
     "style": "rose",
     "backgroundColor": "#b18b84",
@@ -79,6 +79,12 @@
     ]
   },
   "theme": "vintage",
+  "audio": {
+    "filename": "1cb37f68-b0f0-418a-b0f7-e1bccfffdcd5.mp3",
+    "title": "Nơi Này Có Anh",
+    "volume": 0.4,
+    "loop": true
+  },
   "pages": [
     {
       "id": "page-1",

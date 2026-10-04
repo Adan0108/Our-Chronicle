@@ -2316,16 +2316,52 @@ h1 {
 .ambience-control {
   color: #756750;
 }
-.ambience-trigger {
+.ambience-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 13px;
+  gap: 4px;
+  padding: 4px;
   border: 1px solid #d8cebd;
   border-radius: 6px;
   background: #fbf8f0ed;
   box-shadow: 0 3px 15px #6951370d;
+}
+.ambience-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 3px 7px;
+  border-radius: 4px;
   color: #756750;
+  font-size: 11px;
+}
+.ambience-summary {
+  display: flex;
+  flex-direction: column;
+  min-width: 72px;
+  text-align: left;
+}
+.ambience-label {
+  font-size: 11px;
+  line-height: 13px;
+}
+.ambience-state {
+  font-size: 9px;
+  line-height: 11px;
+  color: #8a7b65;
+}
+.ambience-quick-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 58px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: var(--olive);
+  color: #fffdf7;
   font-size: 11px;
 }
 .ambience-trigger:hover {
@@ -2335,11 +2371,9 @@ h1 {
   border-color: #bac6aa;
   color: #617053;
 }
-.ambience-playing-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #7f9267;
+.ambience-playing .ambience-trigger,
+.ambience-playing .ambience-state {
+  color: #617053;
 }
 .ambience-popover {
   inset: auto 24px 76px auto;
@@ -2385,7 +2419,8 @@ h1 {
   color: #fffdf7;
   font-size: 12px;
 }
-.ambience-play:hover:not(:disabled) {
+.ambience-play:hover:not(:disabled),
+.ambience-quick-play:hover:not(:disabled) {
   background: var(--olive);
   box-shadow: inset 0 0 0 100px #00000012;
 }

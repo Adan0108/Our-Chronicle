@@ -469,7 +469,9 @@ test("a fresh mixed page preserves real transparency, transforms, layers, theme 
     .selectOption("handwritten");
   await page.getByLabel("Text color", { exact: true }).fill("#5b684f");
   await setTheme(page, "vintage");
-  await page.getByRole("button", { name: "Ambience", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Music settings", exact: true })
+    .click();
   await page.getByLabel("Upload audio", { exact: true }).setInputFiles({
     name: "soft-local-tone.wav",
     mimeType: "audio/wav",
@@ -477,7 +479,7 @@ test("a fresh mixed page preserves real transparency, transforms, layers, theme 
   });
   await expect(page.getByTestId("ambience-audio")).toHaveCount(1);
   await saved(page);
-  await page.getByLabel("Ambience volume", { exact: true }).fill("0.23");
+  await page.getByLabel("Ambience volume", { exact: true }).fill("23");
   await page
     .getByRole("button", { name: "Close ambience", exact: true })
     .click();
@@ -1105,7 +1107,9 @@ test("local audio never autoplays, plays and pauses explicitly, persists setting
   test.setTimeout(100_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await freshPage(page, request);
-  await page.getByRole("button", { name: "Ambience", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Music settings", exact: true })
+    .click();
   const settings = page.getByRole("dialog", {
     name: "Music and ambience",
     exact: true,
@@ -1127,7 +1131,7 @@ test("local audio never autoplays, plays and pauses explicitly, persists setting
   await expect
     .poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime))
     .toBeGreaterThan(0);
-  await settings.getByLabel("Ambience volume", { exact: true }).fill("0.18");
+  await settings.getByLabel("Ambience volume", { exact: true }).fill("18");
   await saved(page);
   await expect(audio).toHaveJSProperty("volume", 0.18);
   expect((await readBook(request)).audio?.volume).toBe(0.18);
@@ -1148,7 +1152,9 @@ test("local audio never autoplays, plays and pauses explicitly, persists setting
   await page.reload();
   await expect(audio).toHaveJSProperty("paused", true);
   await expect(audio).toHaveJSProperty("volume", 0.18);
-  await page.getByRole("button", { name: "Ambience", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Music settings", exact: true })
+    .click();
   await settings
     .getByRole("button", { name: "Play ambience", exact: true })
     .click();
@@ -1172,7 +1178,9 @@ test("local audio never autoplays, plays and pauses explicitly, persists setting
       (node) => node === document.querySelector(".flipbook"),
     ),
   ).toBeTruthy();
-  await page.getByRole("button", { name: "Ambience", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Music settings", exact: true })
+    .click();
   await page.keyboard.press("Escape");
   await expect(settings).not.toBeVisible();
   await expect(
@@ -1185,7 +1193,9 @@ test("local audio never autoplays, plays and pauses explicitly, persists setting
   await page
     .getByRole("button", { name: "Edit scrapbook", exact: true })
     .click();
-  await page.getByRole("button", { name: "Ambience", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Music settings", exact: true })
+    .click();
   await page.getByRole("button", { name: "Remove audio", exact: true }).click();
   await saved(page);
   expect((await readBook(request)).audio).toBeUndefined();
