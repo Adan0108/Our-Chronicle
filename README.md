@@ -49,8 +49,9 @@ Both modes use the same local data folder and default address. This application 
 - **Editor shortcuts:** Outside inputs, dialogs, and menus, Delete/Backspace deletes the selection, Ctrl/Cmd+D duplicates, Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes, and Escape closes contextual UI or deselects. Alt/Option+ArrowUp/ArrowDown moves the selection forward/backward one layer. Normal typing and clipboard paste in fields retain their usual behavior.
 - **Photo styles:** Choose plain, polaroid, soft shadow, paper frame, taped photo, or borderless. Frames remain editable styles; they are not baked into the image.
 - **Decorations:** Choose **Decorations** for the small built-in tape, botanical, doodle, label, and paper collection, or **Upload decoration** for your own transparent PNG/WebP. Decorations have no photo frame or background. Move, resize, crop, rotate, duplicate, layer, and lock them like other elements; built-in stickers also have editable colors, and date labels have editable text. These controls also work on the cover.
-- **Themes:** Expand **Book theme** in the inspector and choose Café, Vintage Journal, Minimal Ivory, Wedding, or Campus Diary. Themes change the environment and paper accents without rewriting your text styles or moving content. Theme changes support undo/redo.
+- **Themes:** Expand **Book theme** in the inspector. Café frames the book with warm lamp light and a café-window vignette; Vintage Journal adds a postcard/torn-paper collage and faded postal marks; Minimal Ivory stays calm with embossed linework; Wedding pairs ivory/blush floral branches with soft petals and glints; Campus Diary features an illustrated sakura branch and a taped diary note. Small dust, petals, and paper details remain secondary. Artwork is quieter while editing and stronger in Presentation Mode, and scales down on narrower screens. Theme changes support undo/redo without rewriting text styles or moving content.
 - **Presentation:** In reading mode, choose **Present book** for a centered book with minimal controls. Mouse page turns and native cover opening/closing still work. Use **Enter fullscreen** if desired; **Exit presentation** or Escape returns to reading. Leaving fullscreen also exits presentation.
+- **Reduce motion:** Open **Motion settings** and enable **Reduce motion** for a still atmosphere and shorter color transitions. Signature artwork stays visible while dust, petals, and steam stop. Native book turns retain their physical motion. Your device's reduced-motion preference is always respected, even with this switch off. This setting stays in the browser; it is separate from the book and ZIP exports. If browser storage is blocked, it lasts for the current tab only.
 - **Music:** The compact Music control shows whether a track is not configured, paused, or playing, with Play/Pause available directly. Open its settings to adjust volume from 0–100%; 0% mutes without removing the track. In edit mode, upload one local MP3, WAV, or Ogg (Vorbis/Opus) file up to 20 MB and optionally enable looping. A newly selected or replacement track starts at 40%; existing saved volume stays unchanged on refresh or import. Volume is saved with the book and included in exports. Audio never autoplays, including after refresh or import; playback itself is not an undo step.
 - **Layers and locks:** **Layers** lists frontmost elements first, with text previews, photo captions/filenames, and sticker names. Drag a row's handle to reorder; keyboard users can focus the handle, press Space, use Up/Down, and press Space to finish or Escape to cancel. Reordering changes the book immediately, supports undo/redo, and persists. Click a row to select even covered or locked items. **Bring forward** / **Send backward** remain available. **Lock position** prevents movement/resizing while allowing appearance edits and explicit duplicate/delete actions; **Unlock position** restores movement.
 - **Pages:** Add a blank page, duplicate a page, move it earlier/later, or choose **New page from template** (journal, single photo, two photos, collage). Select empty photo frames and use **Add photo to frame** to fill them. Deletion asks for confirmation, and at least two pages must remain.
@@ -75,6 +76,8 @@ Removed/replaced photos have recovery copies in `storage/images/.trash/` for und
 Removed/replaced audio has the same recovery mechanism in `storage/audio/.trash/`, bounded to seven days and 100 files. Playback progress and presentation mode are not saved.
 
 Content is stored in this folder, **not in a database, browser storage, or cloud service**. Uploads are served through the API and do not enter `public/` or source folders.
+
+The optional Reduce motion preference uses this browser's local storage. It does not contain scrapbook content and is not part of folder backups or exported books.
 
 For a portable manual backup, use **Book options → Export Book** and keep the downloaded ZIP on another drive. You can also **back up the entire `storage/` folder while the app is stopped**; copying only the JSON will not preserve the photographs. To restore a folder backup, stop the app, replace `storage/` with your backup, and restart.
 
@@ -138,13 +141,18 @@ Our-Chronicle/
 │   │   ├── layout.tsx                # Root layout and metadata
 │   │   ├── globals.css               # Theme and responsive styles
 │   │   ├── editor-canvas.css         # Selection, guides, empty/drop feedback
-│   │   └── editor-controls.css       # Floating tools and sortable Layers styles
+│   │   ├── editor-controls.css       # Floating tools and sortable Layers styles
+│   │   ├── theme-atmosphere.css      # Bounded noninteractive theme effects
+│   │   └── motion-settings.css       # Compact local motion preference control
 │   ├── components/
 │   │   ├── book/
 │   │   │   ├── cover.tsx             # Native front cover and standalone edit canvas
 │   │   │   ├── reader.tsx            # Page-flip library integration
 │   │   │   ├── book-actions.tsx      # Export/import/reset dialogs
 │   │   │   ├── ambience.tsx          # Explicit audio playback and local settings
+│   │   │   ├── motion-settings.tsx   # Browser-local preference and device explanation
+│   │   │   ├── theme-atmosphere.tsx  # Noninteractive environment accents and particles
+│   │   │   ├── theme-signatures.tsx  # Illustrated theme framing in lightweight SVG
 │   │   │   ├── sticker.tsx           # Lightweight built-in SVG decorations
 │   │   │   └── page-renderer.tsx     # Page renderer and shared cover/page element layer
 │   │   ├── editor/                   # Inspector, crop/template dialogs, deletion
@@ -154,14 +162,15 @@ Our-Chronicle/
 │   │   │   └── image-import-dialog.tsx # Photo/decoration choice for drops and paste
 │   │   └── scrapbook.tsx             # Reading/editing UI and interactions
 │   ├── hooks/
-│   │   └── use-book.ts               # Autosave, revisions, and bounded history
+│   │   ├── use-book.ts               # Autosave, revisions, and bounded history
+│   │   └── use-reduce-motion.ts      # Local preference and OS motion subscription
 │   ├── lib/
 │   │   ├── api.ts                    # Request checks and API errors
 │   │   ├── cover.ts                  # Cover palettes, legacy defaults, image references
 │   │   ├── editor.ts                 # Data-driven templates and duplication
 │   │   ├── editor-geometry.ts        # Bounded group movement, snapping, drop coordinates
 │   │   ├── decorations.ts            # Sticker catalog and element defaults
-│   │   ├── themes.ts                 # Curated theme identifiers and labels
+│   │   ├── themes.ts                 # Curated palettes, labels, and atmosphere manifest
 │   │   └── storage/
 │   │       ├── index.ts              # Storage interface and instance
 │   │       ├── local.ts              # Filesystem storage and safe writes
@@ -181,6 +190,7 @@ Our-Chronicle/
 │   ├── editor-phase.spec.ts           # Formatting, layers, templates, and history
 │   ├── editor-ux.spec.ts              # Fresh-page interactions, clipboard, tools, gestures
 │   ├── editor-geometry.spec.ts        # Snapping, group bounds, locks, and scaled coordinates
+│   ├── theme-atmosphere.spec.ts       # Theme effects, motion preferences, gestures, and portability
 │   ├── cover.spec.ts                  # Cover editing, persistence, and portable round trips
 │   ├── cover-storage.spec.ts          # Cover validation, recovery, and archive compatibility
 │   ├── portability.spec.ts            # Round trips, backups, and archive safety
@@ -194,6 +204,8 @@ Our-Chronicle/
 Pages and customized covers contain arrays of the same text, image, and sticker elements rather than hard-coded layouts. Array order defines layers from back to front. Images can have an optional photo/decoration kind; sticker elements reference the local SVG catalog. Optional book theme/audio fields leave older books compatible, with Café as the theme fallback. The optional `cover` object stores its style, background color, and elements. Existing books without it render an editable default from their title/subtitle without writing a migration on load. Optional formatting, crop, and lock fields retain their original presets when absent.
 
 Cover and page editing reuse the element renderer, inspector, image/crop controls, autosave, and bounded history. The reader uses `react-pageflip` / StPageFlip, including native cover opening/closing. A standalone cover canvas takes priority while editing. The editor uses `react-rnd`, `react-easy-crop`, `@dnd-kit/sortable` for Layers, and `@floating-ui/react` for viewport-aware tools. These tools render outside the book's measured surface. Audio uses the browser's native media element and `music-metadata` for server-side validation. API routes validate data and call the storage interface, keeping filesystem persistence separate from the UI.
+
+Theme atmosphere uses deterministic CSS/SVG with at most 12 decorative particles/accents, outside the book's measured surface. It accepts no pointer input, pauses movement in hidden tabs, and becomes still with reduced motion; no canvas loop or new animation dependency is required.
 
 Portability uses `yazl` to write ZIPs, `yauzl` to read bounded entries, and `buffer-crc32` to verify integrity. Imports stage images/audio under fresh safe names and atomically replace the book JSON after creating a safety backup. Earlier files are archived only after that commit; ordinary undo recovery remains bounded and is not exported.
 
@@ -239,7 +251,13 @@ Theme/styles:
 src/app/globals.css
 src/app/editor-canvas.css
 src/app/editor-controls.css
+src/app/motion-settings.css
 src/lib/themes.ts
+
+Theme atmosphere:
+src/components/book/theme-atmosphere.tsx
+src/components/book/theme-signatures.tsx
+src/app/theme-atmosphere.css
 
 Sticker catalog and artwork:
 src/lib/decorations.ts
@@ -251,6 +269,10 @@ src/components/editor/decoration-dialog.tsx
 Audio controls and validation:
 src/components/book/ambience.tsx
 src/lib/storage/audio.ts
+
+Reduced motion preference:
+src/hooks/use-reduce-motion.ts
+src/components/book/motion-settings.tsx
 
 Autosave and undo/redo:
 src/hooks/use-book.ts

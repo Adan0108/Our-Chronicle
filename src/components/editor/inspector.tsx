@@ -635,8 +635,8 @@ export function Inspector({
             </select>
           </label>
           <p className="field-hint">
-            A change of atmosphere. Your words, photos, and their positions stay
-            yours.
+            {THEMES[book.theme ?? "cafe"].description} Your words, photos, and
+            their positions stay yours.
           </p>
         </details>
       )}

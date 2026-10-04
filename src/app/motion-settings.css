@@ -1,0 +1,133 @@
+.motion-settings {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.motion-settings .motion-settings-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #7f725b;
+  background: transparent;
+}
+
+.motion-settings .motion-settings-button:hover {
+  border-color: #dbd3bf;
+  color: #586449;
+  background: #eeebdf;
+}
+
+.motion-settings .motion-settings-button[data-reduced-motion="true"] {
+  color: #627451;
+}
+
+.motion-settings-popover {
+  position: fixed;
+  inset: 74px 22px auto auto;
+  width: 290px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 92px);
+  margin: 0;
+  overflow-y: auto;
+  padding: 17px;
+  border: 1px solid #d6ccb7;
+  border-radius: 9px;
+  background: #fffdf6;
+  color: #63573f;
+  box-shadow: 0 8px 30px #49382125;
+  font-family: Arial, sans-serif;
+}
+
+.motion-settings-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.motion-settings-heading h2 {
+  flex: 1;
+  margin: 0;
+  font-family: var(--serif, Georgia, serif);
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.motion-settings-heading button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  color: #8b7b60;
+}
+
+.motion-settings-heading button:hover {
+  background: #eeeadd;
+}
+
+.motion-settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e2dcc9;
+  border-radius: 5px;
+  color: #5f6d50;
+  background: #f3f3e9;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.motion-settings-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #687753;
+  cursor: pointer;
+}
+
+.motion-settings-popover p {
+  margin: 12px 0 0;
+  color: #81735e;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.motion-settings-popover .motion-system-note {
+  padding: 9px 10px;
+  border-radius: 4px;
+  color: #62724f;
+  background: #eaf0e0;
+}
+
+.motion-settings-popover .motion-settings-local {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e8e0cf;
+  font-size: 10px;
+}
+
+.mode-presentation .motion-settings-popover {
+  top: 66px;
+}
+
+@media (max-height: 760px) {
+  .motion-settings-popover {
+    top: 65px;
+    max-height: calc(100dvh - 80px);
+  }
+}
+
+@media (max-width: 600px) {
+  .motion-settings-popover {
+    right: 12px;
+  }
+}

@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "./editor-canvas.css";
 @import "./editor-controls.css";
+@import "./theme-atmosphere.css";
+@import "./motion-settings.css";
 
 .image-import-dialog {
   position: fixed;
@@ -122,6 +124,7 @@ a {
 .app-shell {
   min-height: 100vh;
   background: var(--environment);
+  isolation: isolate;
 }
 .app-header {
   height: 64px;
@@ -2123,13 +2126,25 @@ h1 {
 
 /* Themes change the environment and paper, keeping element typography,
    geometry, cover choices, and photo presets exactly as saved. */
+.theme-cafe {
+  --environment: #ede4d5;
+  --chrome: #faf6ee;
+  --stage-glow: #d7b77b33;
+  --paper-cream: #fcf5e6;
+  --paper-lined: #fbf3e4;
+  --paper-sage: #e9eadc;
+  --paper-grain: 0.24;
+  --olive: #6e7056;
+  --line: #dfd2bd;
+}
 .theme-vintage {
-  --environment: #eee5d4;
-  --chrome: #f6f0e4;
-  --stage-glow: #ba9f6747;
-  --paper-cream: #f5ecd6;
-  --paper-lined: #f4eddc;
-  --paper-sage: #e5e4ce;
+  --environment: #e8dfcd;
+  --chrome: #f5eedf;
+  --stage-glow: #b49c7040;
+  --paper-cream: #f3e7cd;
+  --paper-lined: #f1e7d2;
+  --paper-sage: #e0dfc7;
+  --paper-grain: 0.38;
   --olive: #74664c;
   --line: #d9ccb5;
 }
@@ -2145,24 +2160,25 @@ h1 {
   --line: #dedbd1;
 }
 .theme-wedding {
-  --environment: #f3ebe7;
-  --chrome: #fcf7f3;
+  --environment: #f1ece3;
+  --chrome: #fcf8f2;
   --stage-glow: #dac0b54d;
-  --paper-cream: #fff9f0;
-  --paper-lined: #faf5eb;
-  --paper-sage: #edece2;
-  --paper-grain: 0.2;
+  --paper-cream: #fffaf0;
+  --paper-lined: #fcf7ed;
+  --paper-sage: #eeeee3;
+  --paper-grain: 0.16;
   --olive: #856b64;
   --line: #e2d4ca;
 }
 .theme-campus {
-  --environment: #e9eee6;
-  --chrome: #fafbf4;
+  --environment: #eeeee1;
+  --chrome: #fbfaf1;
   --stage-glow: #a9bd9438;
-  --paper-cream: #faf8e9;
+  --paper-cream: #fcf8e7;
   --paper-lined: #f8f7ea;
   --paper-sage: #e4eadc;
-  --olive: #5d7659;
+  --paper-grain: 0.2;
+  --olive: #647959;
   --line: #d5decb;
 }
 .decoration-dialog {

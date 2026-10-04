@@ -1,0 +1,373 @@
+/* This fixed sibling paints below the journal. Nothing here participates in
+   page measurements or receives a mouse, drag, touch, or keyboard gesture. */
+.theme-atmosphere,
+.theme-atmosphere *,
+.theme-atmosphere::before,
+.theme-atmosphere::after,
+.theme-atmosphere *::before,
+.theme-atmosphere *::after {
+  pointer-events: none !important;
+}
+
+.theme-atmosphere {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: clip;
+  contain: layout paint;
+  color: var(--ambient-ink);
+  --signature-opacity: 0.7;
+  --secondary-opacity: 0.46;
+  --backdrop-opacity: 0.8;
+  --particle-strength: 0.42;
+}
+
+.atmosphere-backdrop {
+  position: absolute;
+  inset: 0;
+  opacity: var(--backdrop-opacity);
+  transition: opacity 220ms ease;
+}
+
+.atmosphere-cafe .atmosphere-backdrop {
+  background:
+    radial-gradient(ellipse at 92% 15%, #e4b86d66, transparent 53%),
+    radial-gradient(ellipse at 8% 77%, #a2844c30, transparent 46%),
+    linear-gradient(130deg, #cbb69718, transparent 52%, #7b604915);
+}
+
+.atmosphere-vintage .atmosphere-backdrop {
+  background:
+    radial-gradient(ellipse at 50% 48%, #fff5d918, transparent 67%),
+    linear-gradient(
+      100deg,
+      #99805c16,
+      transparent 25%,
+      transparent 79%,
+      #99805c19
+    );
+}
+
+.atmosphere-vintage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.13;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23665337' opacity='.25' filter='url(%23g)' d='M0 0h180v180H0z'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+.atmosphere-ivory .atmosphere-backdrop {
+  background: radial-gradient(ellipse at 50% 52%, #ffffff25, transparent 74%);
+}
+
+.atmosphere-ivory::after {
+  content: "";
+  position: absolute;
+  inset: clamp(12px, 2.2vw, 32px);
+  border: 1px solid #fffdf685;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px #c7c0b323;
+}
+
+.atmosphere-wedding .atmosphere-backdrop {
+  background:
+    radial-gradient(ellipse at 10% 80%, #dcbeb638, transparent 37%),
+    radial-gradient(ellipse at 91% 23%, #efd5cd66, transparent 43%),
+    radial-gradient(ellipse at 50% 50%, #fffaf032, transparent 70%);
+}
+
+.atmosphere-campus .atmosphere-backdrop {
+  background-image:
+    linear-gradient(90deg, #6f866707 1px, transparent 1px),
+    linear-gradient(#6f866707 1px, transparent 1px),
+    radial-gradient(ellipse at 90% 18%, #e3b9be44, transparent 39%),
+    radial-gradient(ellipse at 13% 87%, #bfcbb224, transparent 44%);
+  background-size:
+    28px 28px,
+    28px 28px,
+    auto,
+    auto;
+}
+
+.atmosphere-accent {
+  position: absolute;
+  --signature-width: clamp(250px, calc((100vw - 880px) / 2 + 110px), 430px);
+  --edge-bleed: 26px;
+  width: var(--signature-width);
+  aspect-ratio: 3 / 4;
+  opacity: var(--signature-opacity);
+  transition:
+    opacity 220ms ease,
+    color 220ms ease;
+}
+
+.atmosphere-accent > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.accent-left {
+  width: clamp(200px, calc((100vw - 880px) / 2), 300px);
+  left: clamp(8px, 1.5vw, 26px);
+  bottom: 34px;
+  opacity: var(--secondary-opacity);
+  transform: rotate(-4deg);
+}
+
+.accent-right {
+  /* Anchor to the visual viewport, keeping the artwork still when the existing
+     editor/reader changes whether a vertical browser scrollbar is needed. */
+  left: calc(100vw - var(--signature-width) + var(--edge-bleed));
+  top: 64px;
+}
+
+.accent-steam.accent-right {
+  --signature-width: clamp(250px, calc((100vw - 880px) / 2 + 80px), 390px);
+}
+
+.accent-postcard.accent-left {
+  bottom: 28px;
+}
+
+.accent-postcard.accent-right {
+  --edge-bleed: 18px;
+}
+
+.accent-serif {
+  --signature-width: clamp(150px, 17vw, 240px);
+  opacity: 0.24;
+}
+
+.accent-serif.accent-left {
+  display: none;
+}
+
+.accent-notebook.accent-right {
+  --signature-width: clamp(280px, calc((100vw - 880px) / 2 + 135px), 440px);
+  --edge-bleed: 22px;
+}
+
+.atmosphere-particle {
+  position: absolute;
+  display: block;
+  opacity: 0;
+  animation: atmosphere-drift var(--drift-time) ease-in-out var(--drift-delay)
+    infinite;
+}
+
+.particle-dust {
+  border-radius: 50%;
+  background: var(--ambient-ink);
+  box-shadow: 0 0 5px #dfc69866;
+}
+
+.particle-petal {
+  border-radius: 65% 30% 65% 30%;
+  background: linear-gradient(145deg, #f9e1df, var(--ambient-petal) 70%);
+  box-shadow: inset 1px 0 0 #fff7ed77;
+  animation-name: atmosphere-fall;
+}
+
+.particle-paper {
+  border: 1px solid #b9b59b88;
+  border-radius: 1px;
+  background: #fffae0;
+  box-shadow: 1px 1px 0 #8b937526;
+}
+
+.particle-sparkle::before,
+.particle-sparkle::after {
+  content: "";
+  position: absolute;
+  background: #baa77b;
+  border-radius: 50%;
+}
+
+.particle-sparkle::before {
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 100%;
+}
+
+.particle-sparkle::after {
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 1px;
+}
+
+.atmosphere-steam {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: atmosphere-steam 24s ease-in-out infinite;
+}
+
+.atmosphere-steam.steam-second {
+  animation-delay: -12s;
+}
+
+.theme-atmosphere[data-mode="editing"] .atmosphere-particle {
+  animation-duration: calc(var(--drift-time) * 1.35);
+}
+
+.theme-atmosphere[data-mode="editing"] {
+  --signature-opacity: 0.26;
+  --secondary-opacity: 0.16;
+  --backdrop-opacity: 0.45;
+  --particle-strength: 0.18;
+}
+
+.theme-atmosphere[data-mode="editing"] .accent-serif {
+  opacity: 0.12;
+}
+
+.theme-atmosphere[data-mode="presentation"] {
+  --signature-opacity: 0.9;
+  --secondary-opacity: 0.65;
+  --backdrop-opacity: 1;
+  --particle-strength: 0.57;
+}
+
+.theme-atmosphere[data-mode="presentation"] .accent-serif {
+  opacity: 0.34;
+}
+
+.theme-atmosphere[data-visibility="hidden"]
+  :is(.atmosphere-particle, .atmosphere-steam) {
+  animation-play-state: paused;
+}
+
+.theme-atmosphere[data-motion="reduced"] .atmosphere-steam {
+  animation: none;
+}
+
+.app-shell,
+.app-shell .app-header,
+.app-shell .book-page {
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease,
+    color 220ms ease;
+}
+
+.app-shell .page-grain {
+  transition: opacity 220ms ease;
+}
+
+.app-shell[data-reduced-motion="true"],
+.app-shell[data-reduced-motion="true"]
+  :is(.app-header, .book-page, .page-grain),
+.theme-atmosphere[data-motion="reduced"]
+  :is(.atmosphere-accent, .atmosphere-backdrop) {
+  transition: none;
+}
+
+@keyframes atmosphere-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--particle-angle));
+    opacity: 0;
+  }
+  35% {
+    opacity: var(--particle-strength, 0.4);
+  }
+  70% {
+    transform: translate3d(var(--travel-x), var(--travel-y), 0)
+      rotate(calc(var(--particle-angle) + 25deg));
+    opacity: calc(var(--particle-strength, 0.4) * 0.7);
+  }
+}
+
+@keyframes atmosphere-steam {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.1;
+  }
+  50% {
+    transform: translateY(-9px);
+    opacity: 0.5;
+  }
+}
+
+@keyframes atmosphere-fall {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--particle-angle));
+    opacity: 0;
+  }
+  18% {
+    opacity: var(--particle-strength);
+  }
+  78% {
+    transform: translate3d(var(--travel-x), var(--travel-y), 0)
+      rotate(calc(var(--particle-angle) + 80deg));
+    opacity: 0;
+  }
+}
+
+/* At tablet widths, keep the outboard/top motif visible as a shallow corner
+   illustration. Only the decorative viewport changes; the journal never does. */
+@media (max-width: 1100px) {
+  .accent-right,
+  .accent-notebook.accent-right,
+  .accent-steam.accent-right {
+    --signature-width: clamp(260px, 37vw, 340px);
+    --edge-bleed: 16px;
+    height: 185px;
+    aspect-ratio: auto;
+  }
+  .accent-serif.accent-right {
+    --signature-width: 160px;
+    height: 145px;
+  }
+  .accent-right:not(.accent-serif) > svg {
+    mask-image: linear-gradient(#000 82%, transparent);
+  }
+  .cafe-fixture,
+  .cafe-light {
+    transform: translateX(137px) scale(0.8);
+  }
+  .wedding-composition {
+    transform: translateX(40px);
+  }
+  .vintage-composition {
+    transform: translate(35px, -24px);
+  }
+  .accent-left {
+    display: none;
+  }
+}
+
+@media (max-width: 580px) {
+  .accent-right,
+  .accent-notebook.accent-right,
+  .accent-steam.accent-right {
+    --signature-width: 240px;
+    --edge-bleed: 24px;
+    height: 130px;
+    top: 88px;
+  }
+  .accent-serif.accent-right {
+    --signature-width: 125px;
+    height: 115px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-atmosphere :is(.atmosphere-particle, .atmosphere-steam) {
+    animation: none !important;
+  }
+  .theme-atmosphere .atmosphere-particle {
+    display: none;
+  }
+  .app-shell,
+  .app-shell :is(.app-header, .book-page, .page-grain),
+  .theme-atmosphere :is(.atmosphere-accent, .atmosphere-backdrop) {
+    transition: none !important;
+  }
+}

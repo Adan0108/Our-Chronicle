@@ -22,6 +22,7 @@ import {
   Minimize,
 } from "lucide-react";
 import { useBook } from "@/hooks/use-book";
+import { useReduceMotion } from "@/hooks/use-reduce-motion";
 import {
   type Book,
   type BookElement,
@@ -47,6 +48,8 @@ import { Inspector } from "./editor/inspector";
 import { DeletePageDialog } from "./editor/delete-page-dialog";
 import { BookActions } from "./book/book-actions";
 import { BookAmbience } from "./book/ambience";
+import { ThemeAtmosphere } from "./book/theme-atmosphere";
+import { MotionSettings } from "./book/motion-settings";
 import { createSticker } from "@/lib/decorations";
 import {
   CanvasEditorContext,
@@ -80,6 +83,8 @@ export function Scrapbook({
     canUndo,
     canRedo,
   } = useBook(initialBook);
+  const motion = useReduceMotion();
+  const ambientReduced = !motion.ready || motion.reducedMotion;
   const [opened, setOpened] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editingTarget, setEditingTarget] = useState<"pages" | "cover">(
@@ -980,7 +985,14 @@ export function Scrapbook({
     <ImageRevisionContext.Provider value={book.revision}>
       <div
         className={`app-shell theme-${book.theme ?? "cafe"} ${opened ? "book-open" : "book-closed"} ${editing ? "mode-editing" : "mode-reading"} ${presentation ? "mode-presentation" : ""}`}
+        data-reduced-motion={ambientReduced}
       >
+        <ThemeAtmosphere
+          theme={book.theme ?? "cafe"}
+          editing={editing}
+          presentation={presentation}
+          reducedMotion={ambientReduced}
+        />
         <header className="app-header">
           <button
             className="brand"
@@ -1002,6 +1014,14 @@ export function Scrapbook({
               onBusyChange={setTransferBusy}
               onPrepare={async () => ((await save()) ? getRevision() : null)}
             />
+            {!presentation && (
+              <MotionSettings
+                userReduced={motion.userReduced}
+                systemReduced={motion.systemReduced}
+                reducedMotion={motion.reducedMotion}
+                onChange={motion.setUserReduced}
+              />
+            )}
             {editing && (
               <div className="history-controls" aria-label="Edit history">
                 <button
@@ -1104,6 +1124,12 @@ export function Scrapbook({
             <span className="presentation-label">
               <Gift size={14} /> A book to share
             </span>
+            <MotionSettings
+              userReduced={motion.userReduced}
+              systemReduced={motion.systemReduced}
+              reducedMotion={motion.reducedMotion}
+              onChange={motion.setUserReduced}
+            />
             <button
               className="icon-button"
               aria-label={fullscreen ? "Leave fullscreen" : "Enter fullscreen"}
